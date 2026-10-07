@@ -67,22 +67,39 @@ input.t { width:84px; text-align:center; font-variant-numeric:tabular-nums; padd
 .fonts button { text-align:left; background:#12100e; border:1px solid var(--line); border-radius:8px; padding:8px 12px; color:var(--text); cursor:pointer; display:grid; gap:2px; }
 .fonts button.on { border-color:var(--acc); } .fs { font-size:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fn { font-size:12px; color:var(--dim); font-family:inherit; }
 progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; }
+.mo { display:none; }
+@media (max-width:600px) {     /* 폰 폭: 짧은 문구로 바꾸고 단추 묶음과 안내 문구를 한 줄에 맞춘다 */
+  .pc { display:none; } .mo { display:inline; }
+  header { padding:10px 12px; gap:8px; } .transport { padding:10px 12px; } #time { min-width:0; font-size:13px; }
+  main { padding:14px 12px 60px; } .card { padding:12px; }
+  nav, .tools { flex-wrap:nowrap; width:100%; margin-left:0; gap:4px; }
+  .step { flex:1; padding:6px 2px; font-size:13px; white-space:nowrap; } .step b { margin-right:3px; }
+  .tools .mini { flex:1 1 auto; justify-content:center; padding:0 4px; margin:0; font-size:12px; white-space:nowrap; }
+  .keys { flex-wrap:nowrap; gap:6px; } .keys kbd { display:none; } .keys .btn { padding:10px 12px; white-space:nowrap; } .keys .btn.big { flex:1; justify-content:center; padding:12px; font-size:16px; }
+  .bar2 { gap:6px; } .bar2 .mini.wide { margin:0; padding:0 8px; }
+  .hint .mo { white-space:nowrap; } .ltab { padding:8px 2px; font-size:13px; white-space:nowrap; }
+  thead { display:none; } #rows tr { display:grid; grid-template-columns:20px 32px 1fr 1fr; align-items:center; border-bottom:1px solid var(--line); padding:3px 0; }
+  #rows td { border:0; padding:2px 0; width:auto; } #rows td.grow { grid-column:1 / 4; width:auto; } #rows td:last-child { text-align:right; }
+  input.t { width:58px; margin:0 1px; padding:6px 2px; font-size:13px; } input.t::placeholder { font-size:10px; } #rows tr.on { background:#3a2d12; } input.txt { min-width:0; } #rows .mini.wide { padding:0 6px; }
+  #outPanel .row > label:first-child { width:auto; min-width:26px; } #outPanel .row select { flex:1 1 0; width:0; min-width:0; } #outPanel .row input[type=number] { width:62px; }
+  #outPanel .btn.ghost { padding:9px 12px; }
+}
 </style>
 </head>
 <body>
 <header>
   <h1>가사 영상 만들기</h1>
   <nav>
-    <button class="step" data-step="1"><b>1</b>시점 기록</button>
-    <button class="step" data-step="2"><b>2</b>세부 수정</button>
-    <button class="step" data-step="3"><b>3</b>꾸미기와 배치</button>
-    <button class="step" data-step="4"><b>4</b>영상 뽑기</button>
+    <button class="step" data-step="1"><b>1</b><span class="pc">시점 기록</span><span class="mo">기록</span></button>
+    <button class="step" data-step="2"><b>2</b><span class="pc">세부 수정</span><span class="mo">수정</span></button>
+    <button class="step" data-step="3"><b>3</b><span class="pc">꾸미기와 배치</span><span class="mo">꾸미기</span></button>
+    <button class="step" data-step="4"><b>4</b><span class="pc">영상 뽑기</span><span class="mo">뽑기</span></button>
   </nav>
   <div class="tools">
-    <button class="mini wide" id="projSave" title="가사, 시점, 꾸밈을 파일 하나로 저장"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" /> <path d="M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M14 4l0 4l-6 0l0 -4" /> </svg> 작업 저장</button>
-    <label class="mini wide" title="저장해 둔 작업 파일 불러오기"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2" /> </svg> 작업 불러오기<input type="file" id="fProj" accept=".json" hidden></label>
-    <button class="mini wide" id="styleSave" title="지금 글꼴, 색, 효과, 위치, 비율, 전환을 기본 꾸밈으로 기억"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4" /> </svg> 내 스타일로 저장</button>
-    <button class="mini wide" id="styleClear" hidden>내 스타일 지우기</button>
+    <button class="mini wide" id="projSave" title="가사, 시점, 꾸밈을 파일 하나로 저장"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" /> <path d="M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M14 4l0 4l-6 0l0 -4" /> </svg> <span class="pc">작업 저장</span><span class="mo">저장</span></button>
+    <label class="mini wide" title="저장해 둔 작업 파일 불러오기"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2" /> </svg> <span class="pc">작업 불러오기</span><span class="mo">불러오기</span><input type="file" id="fProj" accept=".json" hidden></label>
+    <button class="mini wide" id="styleSave" title="지금 글꼴, 색, 효과, 위치, 비율, 전환을 기본 꾸밈으로 기억"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4" /> </svg> <span class="pc">내 스타일로 저장</span><span class="mo">스타일 저장</span></button>
+    <button class="mini wide" id="styleClear" hidden><span class="pc">내 스타일 지우기</span><span class="mo">스타일 삭제</span></button>
   </div>
 </header>
 <p class="hint" id="styleNote" style="margin:6px 24px 0"></p>
@@ -106,9 +123,9 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
       <h3>들으면서 찍기</h3>
       <div class="rec"><div id="recPrev"></div><div id="recNow"></div><div id="recNext"></div></div>
       <div class="keys">
-        <button class="btn big" id="bStamp">이 줄 시작 찍기<kbd>Space</kbd></button>
-        <button class="btn ghost" id="bBlank">가사 지우기<kbd>X</kbd></button>
-        <button class="btn ghost" id="bUndo">한 줄 되돌리기<kbd>Backspace</kbd></button>
+        <button class="btn big" id="bStamp"><span class="pc">이 줄 시작 찍기</span><span class="mo">찍기</span><kbd>Space</kbd></button>
+        <button class="btn ghost" id="bBlank"><span class="pc">가사 지우기</span><span class="mo">지우기</span><kbd>X</kbd></button>
+        <button class="btn ghost" id="bUndo"><span class="pc">한 줄 되돌리기</span><span class="mo">되돌리기</span><kbd>Backspace</kbd></button>
       </div>
       <p class="hint" style="text-align:center" id="recCount"></p>
       <p class="hint" style="text-align:center">재생과 멈춤은 <kbd>Enter</kbd>, 3초 이동은 <kbd>←</kbd> <kbd>→</kbd>. 가운데 큰 줄이 시작되는 순간에 찍으세요. 간주가 시작되면 가사 지우기를 누르면 그 줄이 거기서 사라집니다.</p>
@@ -120,7 +137,7 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
       <div class="bar2">
         <label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg> SRT 불러오기<input type="file" id="fSrt" accept=".srt,.txt"></label>
         <button class="btn ghost" id="srtDown"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /> </svg> SRT 내려받기</button>
-        <span class="hint">전체 시점</span><button class="mini wide" id="shiftM">0.1초 당기기</button><button class="mini wide" id="shiftP">0.1초 밀기</button>
+        <span class="hint">전체 시점</span><button class="mini wide" id="shiftM"><span class="pc">0.1초 당기기</span><span class="mo">-0.1초</span></button><button class="mini wide" id="shiftP"><span class="pc">0.1초 밀기</span><span class="mo">+0.1초</span></button>
         <button class="mini wide" id="addRow">줄 추가</button>
       </div>
       <div id="live"></div>

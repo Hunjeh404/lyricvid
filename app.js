@@ -7,6 +7,7 @@ const RATIOS = [['3:2', 2160, 1440], ['16:9', 2560, 1440], ['2:1', 2880, 1440], 
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lt = (pc, mo) => [el('span', { className: 'pc', textContent: pc }), el('span', { className: 'mo', textContent: mo })];   // 넓은 화면용 문구, 폰용 짧은 문구
 const audio = $('#audio');
 
 const defStyle = () => ({ fC: '#ffffff', oOn: false, oW: 4, oC: '#000000', sOn: true, sD: 3, sB: 8, sC: '#000000', gOn: false, gS: 14, gC: '#ffd27a' });
@@ -123,7 +124,7 @@ function drawTable() {
       el('td', {}, el('button', { className: 'mini', innerHTML: ICON.play, title: '이 줄부터 듣기', onclick: () => { if (c.start != null) { audio.currentTime = c.start; audio.play(); } } })),
       tIn('start'), tIn('end'), el('td', { className: 'grow' }, text),
       el('td', {},
-        el('button', { className: 'mini wide', textContent: '여기부터 다시 찍기', onclick: () => { for (let j = i; j < S.cues.length; j++) S.cues[j].start = S.cues[j].end = null; if (i) S.cues[i - 1].end = null; S.rec = i; audio.currentTime = i ? S.cues[i - 1].start ?? 0 : 0; go(1); } }),
+        el('button', { className: 'mini wide', onclick: () => { for (let j = i; j < S.cues.length; j++) S.cues[j].start = S.cues[j].end = null; if (i) S.cues[i - 1].end = null; S.rec = i; audio.currentTime = i ? S.cues[i - 1].start ?? 0 : 0; go(1); } }, ...lt('여기부터 다시 찍기', '다시 찍기')),
         el('button', { className: 'mini', innerHTML: ICON.trash, title: '줄 삭제', onclick: () => { S.cues.splice(i, 1); if (S.rec > i) S.rec--; sprites.clear(); drawTable(); } }))));
   });
 }
@@ -243,7 +244,7 @@ function draw(g, t, edit) {
   else if (edit) i = S.cues.findIndex(c => c.text);
   if (i >= 0 && S.cues[i].text) {
     const s2 = Math.round(L.size * .72), a = textSprite(S.cues[i].text, L.font, L.size, L.st);
-    const nx = L.mode === 2 && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
+    const nx = L.mode === 2 && S.cues[i].end == null && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
     const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * .16 : 0;
     const b = place(L, Math.max(a.w, nx?.w || 0), a.h + gap + h2);
     g.globalAlpha = alpha; g.drawImage(a.c, alignX(L, b, a.w) - a.pad, b.y - a.pad);
@@ -452,7 +453,7 @@ function buildPanel() {
     row('', check(st, 'oOn', '테두리'), color(st, 'oC'), range(st, 'oW', 1, 24)),
     row('', check(st, 'sOn', '그림자'), color(st, 'sC'), range(st, 'sD', 0, 30), range(st, 'sB', 0, 40)),
     row('', check(st, 'gOn', '빛나는 테두리'), color(st, 'gC'), range(st, 'gS', 2, 60)),
-    el('p', { className: 'hint', textContent: '막대는 왼쪽부터 테두리 굵기 / 그림자 거리·번짐 / 빛의 세기입니다.' }));
+    el('p', { className: 'hint' }, ...lt('막대는 왼쪽부터 테두리 굵기 / 그림자 거리·번짐 / 빛의 세기입니다.', '막대: 테두리 / 그림자 / 빛')));
 }
 $$('.ltab').forEach(b => b.onclick = () => { S.sel = b.dataset.l; buildPanel(); });
 
@@ -526,7 +527,7 @@ async function readWav(file) {     // WAV 안의 소리 데이터를 손대지 �
 function setCropFromLines() { const C = S.crop; if (S.cues[C.from]?.start != null && S.cues[C.to]?.start != null) { C.a = Math.max(0, S.cues[C.from].start); C.b = Math.min(S.dur || Infinity, endOf(C.to)); } else { C.a = 0; C.b = S.dur; } }
 function buildOut() {
   const P = $('#outPanel'), C = S.crop, F = S.fx; P.replaceChildren();
-  const head = t => el('h4', { textContent: t }), row = (label, ...kids) => el('div', { className: 'row' }, el('label', { textContent: label }), ...kids), hint = t => el('p', { className: 'hint', textContent: t });
+  const head = t => el('h4', { textContent: t }), row = (label, ...kids) => el('div', { className: 'row' }, el('label', { textContent: label }), ...kids), hint = (t, mo) => el('p', { className: 'hint' }, ...(mo ? lt(t, mo) : [t]));
   const listen = from => { if (!S.audioFile) return; audio.currentTime = Math.max(0, from); audio.play(); };
   const stamped = S.cues.map((c, i) => i).filter(i => S.cues[i].start != null);
 
@@ -546,8 +547,8 @@ function buildOut() {
       row('', el('button', { className: 'btn ghost', innerHTML: ICON.download + ' 자른 영상 기준 SRT', onclick: () => { const { a, b } = span(); save(new Blob([makeSrt(a, b)], { type: 'text/plain' }), baseName() + '_cut.srt'); } })));
   }
 
-  P.append(head('파일 형식'), el('div', { className: 'ratios' }, ...[['mov', 'MOV · 소리 원본 그대로'], ['mp4', 'MP4 · 어디서나 재생']].map(([v, t]) => { const b = el('button', { className: 'seg' + (S.fmt === v ? ' on' : ''), textContent: t }); b.onclick = () => { S.fmt = v; buildOut(); drawSummary(); }; return b; })),
-    hint(S.fmt === 'mp4' ? 'MP4는 텔레비전, 모니터의 USB 재생, 메신저 등 거의 어디서나 열립니다. 대신 소리를 AAC 고음질로 압축하므로 원본과 똑같지는 않습니다.' : 'MOV는 소리를 원본 그대로 담습니다. 유튜브에 올리거나 편집할 때 알맞습니다.'));
+  P.append(head('파일 형식'), el('div', { className: 'ratios' }, ...[['mov', 'MOV · 소리 원본 그대로', 'MOV 원본 소리'], ['mp4', 'MP4 · 어디서나 재생', 'MP4 호환']].map(([v, t, m]) => { const b = el('button', { className: 'seg' + (S.fmt === v ? ' on' : '') }, ...lt(t, m)); b.onclick = () => { S.fmt = v; buildOut(); drawSummary(); }; return b; })),
+    S.fmt === 'mp4' ? hint('MP4는 텔레비전, 모니터의 USB 재생, 메신저 등 거의 어디서나 열립니다. 대신 소리를 AAC 고음질로 압축하므로 원본과 똑같지는 않습니다.', '어디서나 재생. 소리는 AAC로 압축.') : hint('MOV는 소리를 원본 그대로 담습니다. 유튜브에 올리거나 편집할 때 알맞습니다.', '소리 원본 그대로. 유튜브·편집용.'));
   const TYPES = [['none', '없음'], ['black', '검은 화면'], ['white', '흰 화면'], ['blur', '흐림에서 선명하게'], ['zoom', '확대에서 제자리로'], ['wipe', '닦아내기'], ['iris', '원형 열림']];
   const DIRS = [['lr', '왼쪽에서 오른쪽'], ['rl', '오른쪽에서 왼쪽'], ['tb', '위에서 아래'], ['bt', '아래에서 위']];
   const opt = (obj, key, list) => { const s = el('select'); for (const [v, t] of list) s.append(el('option', { value: v, textContent: t, selected: obj[key] === v })); s.onchange = () => { obj[key] = s.value; buildOut(); drawSummary(); }; return s; };
@@ -557,8 +558,8 @@ function buildOut() {
     row('끝', opt(F, 'outType', TYPES), secs('outDur'), el('span', { className: 'hint', textContent: '초' })), ...(F.outType === 'wipe' ? [row('', opt(F, 'outDir', DIRS))] : []));
   const au = el('input', { type: 'checkbox', checked: F.audio }); au.onchange = () => { F.audio = au.checked; drawSummary(); };
   P.append(el('label', { className: 'chk free' }, au, '소리도 같은 길이로 서서히 키우고 줄이기'),
-    hint('소리 전환을 켜면 전환 구간의 소리만 달라지고, 그 밖은 원본 그대로입니다. 압축은 하지 않습니다.'),
-    row('', el('button', { className: 'btn ghost', textContent: '시작 전환 보기', onclick: () => listen(span().a) }), el('button', { className: 'btn ghost', textContent: '끝 전환 보기', onclick: () => listen(span().b - F.outDur - 1.5) })));
+    hint('소리 전환을 켜면 전환 구간의 소리만 달라지고, 그 밖은 원본 그대로입니다. 압축은 하지 않습니다.', '전환 구간 소리만 바뀝니다. 압축 없음.'),
+    row('', el('button', { className: 'btn ghost', onclick: () => listen(span().a) }, ...lt('시작 전환 보기', '시작 보기')), el('button', { className: 'btn ghost', onclick: () => listen(span().b - F.outDur - 1.5) }, ...lt('끝 전환 보기', '끝 보기'))));
 }
 function wavFloat(w) {      // WAV 소리를 압축기에 넣을 수 있게 소수 값으로 풀기(MP4용)
   const n = w.data.byteLength / w.bpf, bps = w.bits / 8, dv = new DataView(w.data.buffer, w.data.byteOffset, w.data.byteLength), chans = [...Array(w.ch)].map(() => new Float32Array(n));
