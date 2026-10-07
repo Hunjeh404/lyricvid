@@ -462,14 +462,14 @@ function buildPanel() {
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
-    P.append(head('글자'), row('제목', ti), row('이름', ar), el('p', { className: 'hint', textContent: '곡 전용 이퀄라이저에는 제목이 이미 들어 있습니다. 프리셋을 쓸 때 여기에 적으세요.' }));
+    P.append(head('글자'), row('제목', ti), row('이름', ar));
   }
 
   // 위치: 아홉 칸 + 여백
   const grid = el('div', { className: 'grid9' });
   for (const ay of [0, .5, 1]) for (const ax of [0, .5, 1]) { const b = el('button', { className: L.ax === ax && L.ay === ay ? 'on' : '' }); b.onclick = () => { L.ax = ax; L.ay = ay; buildPanel(); }; grid.append(b); }
   const mxI = num(L, 'mx', 0, W, 1), myI = num(L, 'my', 0, H, 1); mxI.disabled = L.ax === .5; myI.disabled = L.ay === .5; mxI.id = 'mxI'; myI.id = 'myI';
-  P.append(head('위치'), el('div', { className: 'posrow' }, grid, el('div', {}, row('가로 여백', mxI), row('세로 여백', myI), el('p', { className: 'hint', textContent: '화면에서 직접 끌어 옮길 수 있습니다. 가운데에 가까워지면 달라붙습니다.' }))));
+  P.append(head('위치'), el('div', { className: 'posrow' }, grid, el('div', {}, row('가로 여백', mxI), row('세로 여백', myI), el('p', { className: 'hint', textContent: '화면에서 직접 끌어 옮길 수 있습니다.' }))));
 
   // 크기
   const sz = S.sel === 'eq' ? [range(L, 'size', .3, 3, .01)] : [range(L, 'size', 20, 240, 1)]; sz[0].id = 'sizeI';
@@ -496,9 +496,9 @@ function buildPanel() {
   P.append(head('색과 효과'),
     row(S.sel === 'eq' ? '색' : '글자색', color(st, 'fC')),
     row('', check(st, 'oOn', '테두리'), color(st, 'oC'), range(st, 'oW', 1, 24)),
-    row('', check(st, 'sOn', '그림자'), color(st, 'sC'), range(st, 'sD', 0, 30), range(st, 'sB', 0, 40)),
+    row('', check(st, 'sOn', '그림자'), color(st, 'sC'), range(st, 'sD', 0, 30)),
     row('', check(st, 'gOn', '빛나는 테두리'), color(st, 'gC'), range(st, 'gS', 2, 60)),
-    el('p', { className: 'hint' }, ...lt('막대는 왼쪽부터 테두리 굵기 / 그림자 거리·번짐 / 빛의 세기입니다.', '막대: 테두리 / 그림자 / 빛')));
+    row('그림자 번짐', range(st, 'sB', 0, 40)));
 }
 $$('.ltab').forEach(b => b.onclick = () => { S.sel = b.dataset.l; buildPanel(); });
 
