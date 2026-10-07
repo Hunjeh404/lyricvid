@@ -57,7 +57,7 @@ $$('.step').forEach(b => b.onclick = () => go(+b.dataset.step));
 /* ---------- 재생 막대 ---------- */
 const seek = $('#seek');
 $('#play').onclick = () => audio.paused ? audio.play() : audio.pause();
-audio.onplay = audio.onpause = () => $('#play').classList.toggle('playing', !audio.paused);
+audio.onplay = audio.onpause = () => { $('#play').classList.toggle('playing', !audio.paused); $('#live').hidden = audio.paused; };      // 지금 줄 크게 보기는 재생 중에만
 audio.onloadedmetadata = () => { S.dur = audio.duration; seek.max = S.dur; };
 seek.oninput = () => audio.currentTime = +seek.value;
 

@@ -57,7 +57,7 @@ input.t { width:84px; text-align:center; font-variant-numeric:tabular-nums; padd
 #selbox { position:absolute; outline:2px dashed var(--acc); outline-offset:4px; pointer-events:none; }
 #handle { position:absolute; right:-12px; bottom:-12px; width:16px; height:16px; background:var(--acc); border:2px solid #000; border-radius:3px; pointer-events:auto; cursor:nwse-resize; }
 #gv, #gh { position:absolute; background:var(--acc); pointer-events:none; } #gv { left:50%; top:0; bottom:0; width:2px; } #gh { top:50%; left:0; right:0; height:2px; }
-.srcs { display:grid; gap:10px; margin-top:14px; }
+.srcs { display:grid; gap:10px; margin-top:14px; } .eqrow { display:flex; align-items:center; gap:8px; } .eqrow .file { flex:none; white-space:nowrap; } .eqrow .hint { flex:none; margin:0; } .eqrow select { flex:1; min-width:0; }
 .ltabs { display:flex; gap:6px; margin-bottom:14px; } .ltab, .seg { flex:1; background:none; border:1px solid var(--line); color:var(--dim); padding:8px; border-radius:8px; font:inherit; cursor:pointer; }
 .ltab.on, .seg.on { border-color:var(--acc); color:var(--acc); font-weight:600; }
 .row { display:flex; align-items:center; gap:8px; margin:6px 0; flex-wrap:wrap; } .row > label:first-child { width:76px; color:var(--dim); font-size:13px; flex:none; }
@@ -147,7 +147,7 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
         <button class="mini wide" id="shiftM" title="전체 시점을 0.1초 당기기">-0.1s</button><button class="mini wide" id="shiftP" title="전체 시점을 0.1초 밀기">+0.1s</button>
         <button class="mini wide" id="addRow" title="줄 추가">+1줄</button>
       </div>
-      <div id="live"></div>
+      <div id="live" hidden></div>
       <table><thead><tr><th>#</th><th></th><th>시작</th><th>끝</th><th>가사</th><th></th></tr></thead><tbody id="rows"></tbody></table>
     </div>
   </section>
@@ -158,8 +158,7 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
       <p class="hint warn" id="overlap" hidden>가사, 이퀄라이저, 제목 중 겹치는 것이 있습니다. 끌어서 자리를 옮기거나 크기를 줄여 보세요.</p>
       <div class="card srcs">
         <div><label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M15 8h.01" /> <path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12" /> <path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /> <path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /> </svg> 배경 이미지<input type="file" id="fBg" accept="image/*"></label><span class="fname" id="bgName"></span></div>
-        <div><label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg> 곡 전용 이퀄라이저 파일<input type="file" id="fEq" accept=".zip"></label>
-          <span class="hint" style="margin:0 8px">또는 프리셋</span><select id="eqPreset"><option value="">선택 안 함</option></select></div>
+        <div class="eqrow"><label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg> 이퀄라이저 파일<input type="file" id="fEq" accept=".zip"></label><span class="hint">또는</span><select id="eqPreset"><option value="">선택 안 함</option></select></div>
       </div>
     </div>
     <div class="card">
@@ -183,6 +182,6 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
   </section>
 </main>
 <script>window.ICON = {"play":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M7 4v16l13 -8l-13 -8" /> </svg>',"trash":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /> </svg>',"upload":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg>',"download":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /> </svg>',"left":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M5 12l14 0" /> <path d="M5 12l6 6" /> <path d="M5 12l6 -6" /> </svg>',"right":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M5 12l14 0" /> <path d="M13 18l6 -6" /> <path d="M13 6l6 6" /> </svg>',"up":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M12 5l0 14" /> <path d="M18 11l-6 -6" /> <path d="M6 11l6 -6" /> </svg>',"down":'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M12 5l0 14" /> <path d="M18 13l-6 6" /> <path d="M6 13l6 6" /> </svg>'};</script>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=1008a"></script>
 </body>
 </html>
