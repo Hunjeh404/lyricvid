@@ -576,12 +576,35 @@ function drawSummary() {
 }
 let cancelled = false;
 $('#cancel').onclick = () => cancelled = true;
+
+// 영상을 메모리에 쌓지 않고 브라우저 전용 저장 공간의 임시 파일에 바로 쓴다(지원하지 않으면 메모리 방식으로 돌아감)
+const TMP = 'lyricvideo-tmp', LOCK = 'lyricvideo-render'; let releaseLock = null;
+const hasDisk = () => !!navigator.storage?.getDirectory && 'createWritable' in (window.FileSystemFileHandle?.prototype || {});
+const removeTmp = async () => { try { await (await navigator.storage.getDirectory()).removeEntry(TMP); } catch {} };
+function takeLock() {      // 이 창이 임시 파일을 쓰고 있다는 표시. 다른 창이 이미 쓰는 중이면 false
+  if (!navigator.locks) return Promise.resolve(true);
+  return new Promise(res => navigator.locks.request(LOCK, { ifAvailable: true }, lock => { if (!lock) return res(false); res(true); return new Promise(r => releaseLock = r); }));
+}
+const dropLock = () => { releaseLock?.(); releaseLock = null; };
+async function cleanTmp() {      // 지난번에 남은 임시 파일 지우기. 다른 창이 쓰는 중이면 건드리지 않는다
+  if (!hasDisk() || releaseLock) return; if (await takeLock()) { await removeTmp(); dropLock(); }
+}
+async function openDisk(est) {   // 임시 파일 열기. 못 쓰는 상황이면 null
+  if (!hasDisk()) return null;
+  if (!releaseLock && !(await takeLock())) return null;
+  await removeTmp();
+  try {
+    const e = await navigator.storage.estimate(); if (e.quota - e.usage < est * 2.2) throw new Error('저장 공간 부족');
+    const handle = await (await navigator.storage.getDirectory()).getFileHandle(TMP, { create: true }); return { handle, writable: await handle.createWritable() };
+  } catch { await removeTmp(); dropLock(); return null; }
+}
+cleanTmp();
 $('#render').onclick = async () => {
   if (!S.audioFile) return alert('음원을 먼저 넣어 주세요.');
   if (!window.VideoEncoder) return alert('이 브라우저에서는 영상을 만들 수 없습니다. 컴퓨터의 크롬이나 엣지에서 열어 주세요.');
   const st = $('#status'), bar = $('#prog'); cancelled = false; audio.pause();
   $('#render').disabled = true; $('#cancel').hidden = false; $('#result').replaceChildren(); bar.hidden = false; bar.value = 0;
-  let out;
+  let out, disk = null;
   try {
     await loadAllFonts(); st.textContent = '음원을 읽는 중…';
     const wav = await readWav(S.audioFile); let pcm = null;
@@ -591,7 +614,10 @@ $('#render').onclick = async () => {
     }
     const mp4 = S.fmt === 'mp4', raw = wav && !mp4;      // raw: WAV 소리 데이터를 그대로 옮겨 담는 경우
     if (wav && mp4) pcm = wavFloat(wav);
-    const format = mp4 ? new MB.Mp4OutputFormat({ fastStart: 'in-memory' }) : new MB.MovOutputFormat(); out = new MB.Output({ format, target: new MB.BufferTarget() });
+    const estDur = S.crop.on ? span().b - span().a : (S.dur || 600), est = estDur * (BITRATE * W * H / (2560 * 1440) / 8 + (raw ? wav.sr * wav.bpf : mp4 ? 32000 : pcm.sr * pcm.ch * 2));
+    disk = await openDisk(est);
+    const format = mp4 ? new MB.Mp4OutputFormat({ fastStart: disk ? false : 'in-memory' }) : new MB.MovOutputFormat();
+    out = new MB.Output({ format, target: disk ? new MB.StreamTarget(disk.writable, { chunked: true, chunkSize: 4 * 1048576 }) : new MB.BufferTarget() });
     let aCodec = 'pcm-s16';
     if (mp4) { aCodec = await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: pcm.ch, sampleRate: pcm.sr, bitrate: 256e3 }); if (!aCodec) throw new Error('이 브라우저가 MP4용 소리 압축을 지원하지 않습니다. MOV로 뽑아 주세요'); }
     const br = Math.round(BITRATE * W * H / (2560 * 1440)), codec = await MB.getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, bitrate: br });
@@ -620,12 +646,13 @@ $('#render').onclick = async () => {
       if (i % FPS === FPS - 1) { await pushAudio((i + 1) / FPS); bar.value = i / frames; const el2 = (performance.now() - t0) / 1000; st.textContent = `영상 만드는 중… ${Math.round(i / frames * 100)}% (남은 시간 약 ${Math.ceil(el2 / (i + 1) * (frames - i) / 60)}분)`; }
     }
     await pushAudio(Infinity); st.textContent = '파일로 묶는 중…'; await out.finalize();
-    const blob = new Blob([out.target.buffer], { type: mp4 ? 'video/mp4' : 'video/quicktime' }), name = baseName() + (S.crop.on ? '_cut' : '') + (S.ratio === '16:9' ? '' : '_' + S.ratio.replace(':', 'x')) + (mp4 ? '.mp4' : '.mov'); bar.value = 1;
+    const mime = mp4 ? 'video/mp4' : 'video/quicktime', blob = disk ? (f => f.slice(0, f.size, mime))(await disk.handle.getFile()) : new Blob([out.target.buffer], { type: mime }), name = baseName() + (S.crop.on ? '_cut' : '') + (S.ratio === '16:9' ? '' : '_' + S.ratio.replace(':', 'x')) + (mp4 ? '.mp4' : '.mov'); bar.value = 1;
     st.textContent = `완료. ${(blob.size / 1048576).toFixed(1)}MB, 영상 압축 방식 ${codec.toUpperCase()}, 소리 ${mp4 ? aCodec.toUpperCase() + ' 고음질 압축' : wav ? (fi || fo ? '압축 없이 담고 시작과 끝만 서서히 조절' : '원본 WAV 그대로') : '압축 없이(풀어서) 담음'}.` + (mp4 && (aCodec !== 'aac' || codec !== 'avc') ? ' 이 브라우저가 H.264나 AAC를 지원하지 않아 다른 방식으로 담았습니다. 텔레비전이나 모니터에서 안 열릴 수 있으니 크롬이나 엣지에서 다시 뽑아 보세요.' : '');
     $('#result').append(el('button', { className: 'btn', innerHTML: ICON.download + ' ' + name + ' 저장', onclick: () => save(blob, name) }));
-    window.__lastBlob = blob; save(blob, name);
+    window.__lastBlob = blob; window.__lastMode = disk ? 'disk' : 'memory'; save(blob, name);
   } catch (err) {
     if (out && out.state !== 'finalized') await out.cancel().catch(() => {});
+    if (disk) { await removeTmp(); dropLock(); }
     st.textContent = err.message === 'cancel' ? '취소했습니다.' : '실패: ' + err.message; if (err.message !== 'cancel') console.error(err);
   }
   $('#render').disabled = false; $('#cancel').hidden = true;
