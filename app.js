@@ -419,6 +419,7 @@ function tapBeat() {
 function syncBeat() { const b = S.beat; if ($('#bpm')) { $('#bpm').value = b.bpm || ''; $('#first').value = b.bpm ? b.first : ''; $('#tapN').textContent = b.taps.length ? `${b.taps.length}번 누름` : ''; } }
 
 // 오른쪽 조절판을 현재 고른 층(가사/이퀄라이저/제목)에 맞춰 다시 만든다
+let fxSel = 'o';      // 색과 효과에서 조절바가 맡고 있는 효과
 function buildPanel() {
   $$('.ltab').forEach(b => b.classList.toggle('on', b.dataset.l === S.sel));
   const P = $('#panel'), L = S.L[S.sel]; P.replaceChildren();
@@ -493,12 +494,15 @@ function buildPanel() {
     P.append(head('글꼴'), list, el('button', { className: 'btn ghost', innerHTML: ICON.upload + ' 내 글꼴 파일 올리기', onclick: () => up.click() }), up);
   }
   const st = L.st;
+  // 조절바 하나가 고른 효과(이름이나 체크 칸을 누른 것)의 값을 바꾼다: 테두리 두께 / 그림자 간격 / 빛번짐 넓이
+  const FX = { o: ['oOn', '테두리', 'oC', 'oW', 1, 24], s: ['sOn', '그림자', 'sC', 'sD', 0, 30], g: ['gOn', '빛번짐', 'gC', 'gS', 2, 60] }, bar = el('input', { type: 'range', id: 'fxBar' }), fxRows = {};
+  const pick = k => { fxSel = k; const f = FX[k]; bar.min = f[4]; bar.max = f[5]; bar.value = st[f[3]]; for (const q in fxRows) fxRows[q].classList.toggle('fxon', q === k); };
+  bar.oninput = () => st[FX[fxSel][3]] = +bar.value;
+  const fxRow = k => { const [on, name, c] = FX[k], i = el('input', { type: 'checkbox', checked: st[on] }); i.onchange = () => { st[on] = i.checked; pick(k); }; return fxRows[k] = row('', el('span', { className: 'chk' }, i, el('span', { className: 'fxn', textContent: name, onclick: () => pick(k) })), color(st, c)); };
   P.append(head('색과 효과'),
     row(S.sel === 'eq' ? '색' : '글자색', color(st, 'fC')),
-    row('', check(st, 'oOn', '테두리'), color(st, 'oC'), range(st, 'oW', 1, 24)),
-    row('', check(st, 'sOn', '그림자'), color(st, 'sC'), range(st, 'sD', 0, 30)),
-    row('', check(st, 'gOn', '빛나는 테두리'), color(st, 'gC'), range(st, 'gS', 2, 60)),
-    row('그림자 번짐', range(st, 'sB', 0, 40)));
+    ...Object.keys(FX).map(fxRow), row('', bar));
+  pick(fxSel);
 }
 $$('.ltab').forEach(b => b.onclick = () => { S.sel = b.dataset.l; buildPanel(); });
 
