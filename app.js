@@ -388,7 +388,8 @@ function buildPanel() {
   if (S.sel === 'bg') {
     const rb = el('div', { className: 'ratios' });
     for (const [name] of RATIOS) { const b = el('button', { className: 'seg' + (S.ratio === name ? ' on' : ''), textContent: name }); b.onclick = () => { setRatio(name); buildPanel(); }; rb.append(b); }
-    P.append(head('화면 비율'), rb, el('p', { className: 'hint', textContent: `지금 ${W}x${H}. 짧은 변이 1440이 되도록 맞춥니다.` }), head('배경 이미지'));
+    P.append(head('화면 비율'), rb); rb.scrollLeft = rb.querySelector('.on').offsetLeft - 8;      // 좁은 화면에서는 한 줄을 좌우로 민다: 고른 비율이 보이게
+    P.append(el('p', { className: 'hint', textContent: `지금 ${W}x${H}. 짧은 변이 1440이 되도록 맞춥니다.` }), head('배경 이미지'));
     if (!S.bgImg) { P.append(el('p', { className: 'hint', textContent: '화면 아래에서 배경 이미지를 넣으세요.' })); return; }
     const T = S.bgT, bmp = S.bgImg, cover = Math.max(W / bmp.width, H / bmp.height);
     const fits = [['가로 맞춤', W / bmp.width / cover], ['세로 맞춤', H / bmp.height / cover], ['원본 크기', 1 / cover]];
