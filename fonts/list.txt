@@ -9,3 +9,5 @@ NanumPenScript-Regular.woff2 | 나눔손글씨 펜
 Gaegu-Bold.woff2 | 개구 굵게
 BlackHanSans-Regular.woff2 | 검은고딕
 DoHyeon-Regular.woff2 | 도현
+Pretendard-Regular.woff2 | 프리텐다드
+Pretendard-Bold.woff2 | 프리텐다드 굵게
