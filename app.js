@@ -38,6 +38,7 @@ const fmt = t => t == null ? '' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).p
 const parseT = s => { s = s.trim(); if (!s) return null; const p = s.split(':').map(Number); if (p.some(isNaN)) return undefined; return p.reduce((a, v) => a * 60 + v, 0); };
 const srtT = t => { const ms = Math.round(t * 1000), h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
 const endOf = i => { const c = S.cues[i]; if (c.end != null) return c.end; for (let j = i + 1; j < S.cues.length; j++) if (S.cues[j].start != null) return S.cues[j].start; return Math.min(c.start + 6, S.dur || c.start + 6); };
+const gapAfter = i => { const c = S.cues[i], n = S.cues[i + 1]; return c.end != null && !(n?.start != null && n.start - c.end < .05); };      // 이 줄이 끝난 뒤 다음 줄까지 빈 시간이 있는가
 const activeCue = t => S.cues.findIndex((c, i) => c.start != null && t >= c.start && t < endOf(i));
 
 /* ---------- 화면 전환 ---------- */
@@ -218,7 +219,7 @@ function eqFrame(t) {
   return frames[Math.min(frames.length - 1, Math.floor(frac * frames.length))];
 }
 
-// 한 장면 그리기. edit=true 이면 가사가 없는 순간에도 첫 줄을 보여 줘서 꾸미기 쉽게 한다
+// 한 장면 그리기. edit=true 이면 가사가 없는 순간에도 첫 줄을 보여 줘서 꾸미기 쉽게 한다(멈춰 있을 때만 그렇게 부른다)
 function draw(g, t, edit) {
   const boxes = {};
   if (S.bg) g.drawImage(S.bg, 0, 0); else { g.fillStyle = '#1a1816'; g.fillRect(0, 0, W, H); }
@@ -244,7 +245,7 @@ function draw(g, t, edit) {
   else if (edit) i = S.cues.findIndex(c => c.text);
   if (i >= 0 && S.cues[i].text) {
     const s2 = Math.round(L.size * .72), a = textSprite(S.cues[i].text, L.font, L.size, L.st);
-    const nx = L.mode === 2 && S.cues[i].end == null && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
+    const nx = L.mode === 2 && !gapAfter(i) && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
     const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * .16 : 0;
     const b = place(L, Math.max(a.w, nx?.w || 0), a.h + gap + h2);
     g.globalAlpha = alpha; g.drawImage(a.c, alignX(L, b, a.w) - a.pad, b.y - a.pad);
@@ -496,7 +497,7 @@ function tick() {
   $('#time').textContent = `${fmt(t)} / ${fmt(S.dur)}`;
   if (step === 2) { const i = activeCue(t); $('#live').textContent = i >= 0 ? S.cues[i].text : ''; $$('#rows tr.on').forEach(r => r.classList.remove('on')); if (i >= 0) $('#row' + i)?.classList.add('on'); }
   if (step === 3) {
-    S.boxes = draw(cg, t, true); const b = S.boxes[S.sel]; selbox.hidden = !b;
+    S.boxes = draw(cg, t, audio.paused); const b = S.boxes[S.sel]; selbox.hidden = !b;
     const hit = (p, q) => p && q && p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h, B = S.boxes;
     $('#overlap').hidden = !(hit(B.lyr, B.eq) || hit(B.lyr, B.ttl) || hit(B.eq, B.ttl));
     if (b) Object.assign(selbox.style, { left: b.x / W * 100 + '%', top: b.y / H * 100 + '%', width: b.w / W * 100 + '%', height: b.h / H * 100 + '%' });
@@ -534,7 +535,7 @@ function buildOut() {
 
   const on = el('input', { type: 'checkbox', checked: C.on });
   on.onchange = () => { C.on = on.checked; if (C.on) { if (!C.b) { C.from = stamped[0] ?? 0; C.to = stamped.at(-1) ?? 0; setCropFromLines(); } F.audio = true; } buildOut(); drawSummary(); };
-  P.append(head('구간 자르기'), el('label', { className: 'chk free' }, on, '곡의 일부만 영상으로 만들기'));
+  P.append(el('h4', {}, el('label', { className: 'hchk' }, '구간 자르기', on)));
   if (C.on) {
     const pick = key => { const s = el('select'); for (const i of stamped) s.append(el('option', { value: i, textContent: `${i + 1}. ${S.cues[i].text.slice(0, 22)}`, selected: C[key] === i }));
       s.onchange = () => { C[key] = +s.value; if (C.to < C.from) key === 'from' ? C.to = C.from : C.from = C.to; setCropFromLines(); buildOut(); drawSummary(); }; return s; };
@@ -551,7 +552,7 @@ function buildOut() {
   P.append(head('파일 형식'), el('div', { className: 'ratios' }, ...[['mov', 'MOV(원본 음질)'], ['mp4', 'MP4(AAC 압축)']].map(([v, t]) => { const b = el('button', { className: 'seg' + (S.fmt === v ? ' on' : ''), textContent: t }); b.onclick = () => { S.fmt = v; buildOut(); drawSummary(); }; return b; })));
   const TYPES = [['none', '없음'], ['black', '검은 화면'], ['white', '흰 화면'], ['blur', '흐림에서 선명하게'], ['zoom', '확대에서 제자리로'], ['wipe', '닦아내기'], ['iris', '원형 열림']];
   const OUT = { blur: '선명함에서 흐리게', zoom: '제자리에서 확대로', iris: '원형 닫힘' }, TYPES_OUT = TYPES.map(([v, t]) => [v, OUT[v] || t]);      // 끝 전환은 거꾸로 재생되므로 이름도 거꾸로
-  const view = (title, onclick) => el('button', { className: 'mini end', innerHTML: ICON.play, title, onclick });
+  const view = (title, onclick) => el('button', { className: 'mini end acc', innerHTML: ICON.play, title, onclick });
   const DIRS = [['lr', '왼쪽에서 오른쪽'], ['rl', '오른쪽에서 왼쪽'], ['tb', '위에서 아래'], ['bt', '아래에서 위']];
   const opt = (obj, key, list) => { const s = el('select'); for (const [v, t] of list) s.append(el('option', { value: v, textContent: t, selected: obj[key] === v })); s.onchange = () => { obj[key] = s.value; buildOut(); drawSummary(); }; return s; };
   const secs = key => { const i = el('input', { type: 'number', value: F[key], min: 0, max: 15, step: .1 }); i.oninput = () => { F[key] = clamp(+i.value || 0, 0, 15); }; return i; };
