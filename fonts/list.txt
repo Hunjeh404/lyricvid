@@ -1,0 +1,11 @@
+# 글꼴 목록. 한 줄에 하나씩:  파일이름 | 화면에 보일 이름
+# 글꼴 파일(woff2, ttf, otf)을 이 폴더에 넣고 아래에 한 줄을 추가하면 앱에 나타납니다.
+# 상업적 이용이 가능한 글꼴만 넣으세요. 아래 글꼴은 모두 SIL OFL 라이선스입니다(licenses 폴더 참고).
+GothicA1-Bold.woff2 | 고딕 A1 굵게
+GowunDodum-Regular.woff2 | 고운돋움
+NanumMyeongjo-Bold.woff2 | 나눔명조 굵게
+GowunBatang-Bold.woff2 | 고운바탕 굵게
+NanumPenScript-Regular.woff2 | 나눔손글씨 펜
+Gaegu-Bold.woff2 | 개구 굵게
+BlackHanSans-Regular.woff2 | 검은고딕
+DoHyeon-Regular.woff2 | 도현
