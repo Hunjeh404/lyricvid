@@ -22,7 +22,7 @@ const S = {
   crop: { on: false, a: 0, b: 0, from: 0, to: 0 },          // 구간 자르기: a~b초(원곡 기준)
   fx: { inType: 'none', inDur: 1.5, inDir: 'lr', outType: 'none', outDur: 2.5, outDir: 'lr', audio: false },
   eq: null,            // { meta, frames[] }
-  beat: { bpm: 0, first: 0, taps: [] },
+  lv: null,            // 음원 분석 결과(프리셋을 움직이는 데 쓴다)
   sel: 'lyr',
   L: {
     lyr: { ax: .5, ay: 1, mx: 80, my: 120, size: 72, mode: 1, font: '', st: defStyle() },
@@ -65,6 +65,7 @@ $('#fAudio').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
   S.audioFile = f; audio.src = URL.createObjectURL(f);
   $('#audioName').textContent = `${f.name} (${(f.size / 1048576).toFixed(1)}MB)`;
+  S.lv = null; if (S.eq?.meta.kind === 'live') ensureLevels();
 };
 
 /* ---------- 1. 시점 기록 ---------- */
@@ -108,7 +109,6 @@ addEventListener('keydown', e => {
   else if (step === 1 && e.code === 'Space') { e.preventDefault(); stamp(); }
   else if (step === 1 && e.code === 'KeyX') blank();
   else if (step === 1 && e.code === 'Backspace') { e.preventDefault(); undo(); }
-  else if (step === 3 && e.code === 'KeyB') tapBeat();
 });
 
 /* ---------- 2. 세부 수정 ---------- */
@@ -214,11 +214,62 @@ function maskSprite(bmp, dw, dh, st) {   // 흰 모양(프리셋)에 색과 효�
 const place = (L, w, h) => ({ x: L.ax === 0 ? L.mx : L.ax === 1 ? W - L.mx - w : (W - w) / 2, y: L.ay === 0 ? L.my : L.ay === 1 ? H - L.my - h : (H - h) / 2, w, h });
 const alignX = (L, box, w) => box.x + (box.w - w) * L.ax;
 
-function eqFrame(t) {
-  const { meta, frames } = S.eq; let frac;
-  if (meta.kind === 'preset') { if (!S.beat.bpm) return frames[0]; const beats = meta.beats || 4, tb = (t - S.beat.first) * S.beat.bpm / 60; frac = (((tb % beats) + beats) % beats) / beats; }
-  else frac = (t % meta.loopSeconds) / meta.loopSeconds;
-  return frames[Math.min(frames.length - 1, Math.floor(frac * frames.length))];
+function eqFrame(t) { const { meta, frames } = S.eq; return frames[Math.min(frames.length - 1, Math.floor((t % meta.loopSeconds) / meta.loopSeconds * frames.length))]; }
+
+/* ---------- 소리 분석: 순간마다 음역대별 크기를 재서 프리셋을 움직인다 ---------- */
+const LV_FPS = 60, LV_NB = 24;
+let lvJob = null;
+function ensureLevels() {
+  if (!S.audioFile) return Promise.resolve();
+  if (lvJob?.file === S.audioFile) return lvJob.p;
+  const file = S.audioFile, p = (async () => { try { const lv = await analyze(file); if (S.audioFile === file) S.lv = lv; } catch (e) { console.warn('소리를 분석하지 못함:', e); } })();
+  lvJob = { file, p }; return p;
+}
+async function analyze(file) {
+  const ab = await new OfflineAudioContext(1, 1, 44100).decodeAudioData(await file.arrayBuffer());
+  const sr = ab.sampleRate, n = ab.length, x = new Float32Array(n);
+  for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < n; i++) x[i] += d[i]; }
+  const N = 2048, hop = sr / LV_FPS, F = Math.ceil(n / hop), win = Float32Array.from({ length: N }, (_, i) => .5 - .5 * Math.cos(2 * Math.PI * i / N));
+  const edge = Array.from({ length: LV_NB + 1 }, (_, b) => 50 * 200 ** (b / LV_NB) * N / sr);      // 50Hz~10kHz 를 같은 비율로 나눈 칸
+  const rev = new Uint16Array(N), cs = new Float32Array(N / 2), sn = new Float32Array(N / 2);
+  for (let i = 0; i < N; i++) { let r = 0; for (let b = 0; b < 11; b++) r |= ((i >> b) & 1) << (10 - b); rev[i] = r; }
+  for (let i = 0; i < N / 2; i++) { cs[i] = Math.cos(2 * Math.PI * i / N); sn[i] = -Math.sin(2 * Math.PI * i / N); }
+  const v = new Float32Array(F * LV_NB), re = new Float32Array(N), im = new Float32Array(N);
+  for (let f = 0; f < F; f++) {
+    const s = Math.round(f * hop) - N / 2;
+    for (let i = 0; i < N; i++) { const k = s + i; re[rev[i]] = k >= 0 && k < n ? x[k] * win[i] : 0; }
+    im.fill(0);
+    for (let len = 2; len <= N; len <<= 1) for (let i = 0, h = len >> 1, st = N / len; i < N; i += len) for (let j = 0; j < h; j++) {
+      const wr = cs[j * st], wi = sn[j * st], a = i + j, b = a + h, tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+      re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+    }
+    for (let b = 0; b < LV_NB; b++) { const lo = Math.floor(edge[b]), hi = Math.max(lo + 1, Math.ceil(edge[b + 1])); let e = 0; for (let k = lo; k < hi; k++) e += re[k] * re[k] + im[k] * im[k]; v[f * LV_NB + b] = 10 * Math.log10(e / (hi - lo) + 1e-9); }
+    if (f % 500 === 499) await new Promise(r => setTimeout(r));
+  }
+  // 칸마다 그 곡에서 큰 편인 값을 기준으로 0~1로 바꾸고, 빨리 오르고 천천히 내려오게 다듬는다
+  const col = new Float32Array(F), ref = []; let top = -Infinity;
+  for (let b = 0; b < LV_NB; b++) { for (let f = 0; f < F; f++) col[f] = v[f * LV_NB + b]; ref[b] = Float32Array.from(col).sort()[Math.floor(F * .97)]; top = Math.max(top, ref[b]); }
+  for (let b = 0; b < LV_NB; b++) { const r = Math.max(ref[b], top - 45); let s = 0; for (let f = 0; f < F; f++) { const q = clamp((v[f * LV_NB + b] - r + 30) / 30, 0, 1) ** 1.4; s = q > s ? s + (q - s) * .7 : s * .9; v[f * LV_NB + b] = s; } }
+  return { F, v };
+}
+function level(t, pos) {      // t초에 pos(0=저음 … 1=고음) 자리의 크기 0~1. 분석 전에는 가만히 있는다
+  const lv = S.lv; if (!lv) return .6;
+  const o = clamp(Math.round(t * LV_FPS), 0, lv.F - 1) * LV_NB, x = clamp(pos, 0, 1) * (LV_NB - 1), b = Math.floor(x), k = x - b;
+  return lv.v[o + b] * (1 - k) + lv.v[o + Math.min(b + 1, LV_NB - 1)] * k;
+}
+function liveShape(m, t, dw, dh) {      // 프리셋 모양을 그 순간의 소리 크기에 맞춰 흰색으로 그린다
+  const c = mk(dw, dh), g = c.getContext('2d'), I = m.items, n = I.length, mid = (n - 1) / 2; g.scale(dw / m.width, dw / m.width); g.fillStyle = g.strokeStyle = '#fff';
+  const lv = i => level(t, m.map === 'left' ? i / (n - 1) : Math.abs(i - mid) / mid * .8 + (i > mid ? .04 : 0)), mul = i => .22 + 1.08 * lv(i);
+  if (m.type === 'bars') I.forEach(([x, w, h, rx], i) => { const hh = Math.max(rx ? w : 4, h * mul(i)), y = m.bottom ? m.base - hh : m.cy - hh / 2; g.beginPath(); g.roundRect(x, y, w, hh, rx); g.fill(); });
+  else if (m.type === 'stack') I.forEach(([cx, cnt], i) => { for (let half = Math.round((cnt >> 1) * mul(i)), j = -half; j <= half; j++) { g.beginPath(); if (m.dot) g.arc(cx, m.cy + j * m.pitch, m.w / 2, 0, 7); else g.rect(cx - m.w / 2, m.cy + j * m.pitch - m.h / 2, m.w, m.h); g.fill(); } });
+  else if (m.type === 'diamond') I.forEach(([cx, hw, hh], i) => { const q = Math.max(hw, hh * mul(i)); g.beginPath(); g.moveTo(cx, m.cy - q); g.lineTo(cx + hw, m.cy); g.lineTo(cx, m.cy + q); g.lineTo(cx - hw, m.cy); g.fill(); });
+  else if (m.type === 'line') {
+    const P = I.map(([x, y], i) => [x, m.cy + (y - m.cy) * mul(i)]), at = i => P[clamp(i, 0, n - 1)];
+    g.lineWidth = m.sw; g.lineJoin = 'round'; g.lineCap = m.smooth ? 'round' : 'butt'; g.beginPath(); g.moveTo(...P[0]);
+    for (let i = 0; i < n - 1; i++) { if (!m.smooth) { g.lineTo(...P[i + 1]); continue; } const a = at(i - 1), b = P[i], c2 = P[i + 1], d = at(i + 2); g.bezierCurveTo(b[0] + (c2[0] - a[0]) / 6, b[1] + (c2[1] - a[1]) / 6, c2[0] - (d[0] - b[0]) / 6, c2[1] - (d[1] - b[1]) / 6, c2[0], c2[1]); }
+    g.stroke();
+  } else if (m.type === 'meter') I.forEach((cx, i) => { const lit = .9 + lv(i) * (m.rows - .9); for (let j = 0; j < m.rows; j++) { g.globalAlpha = .2 + .8 * clamp(lit - j, 0, 1); g.beginPath(); g.arc(cx, m.base - j * m.pitch, m.r, 0, 7); g.fill(); } });
+  return c;
 }
 
 // 한 장면 그리기. edit=true 이면 가사가 없는 순간에도 첫 줄을 보여 줘서 꾸미기 쉽게 한다(멈춰 있을 때만 그렇게 부른다)
@@ -228,8 +279,8 @@ function draw(g, t, edit) {
 
   if (S.eq) {
     const L = S.L.eq, m = S.eq.meta, k = (H / 1080) / (m.scale || 1) * L.size;
-    const dw = Math.round(m.width * k), dh = Math.round(m.height * k), b = place(L, dw, dh), f = eqFrame(t);
-    if (m.kind === 'preset') { const s = maskSprite(f, dw, dh, L.st); g.drawImage(s.c, b.x - s.pad, b.y - s.pad); } else g.drawImage(f, b.x, b.y, dw, dh);
+    const dw = Math.round(m.width * k), dh = Math.round(m.height * k), b = place(L, dw, dh);
+    if (m.kind === 'live') { const s = maskSprite(liveShape(m, t, dw, dh), dw, dh, L.st); g.drawImage(s.c, b.x - s.pad, b.y - s.pad); } else g.drawImage(eqFrame(t), b.x, b.y, dw, dh);
     boxes.eq = b;
   }
 
@@ -402,21 +453,9 @@ $('#eqPreset').onchange = async e => {
   S.eqFile = e.target.value;
   if (!e.target.value) { S.eq = null; return buildPanel(); }
   const r = await fetch('eq/' + encodeURI(e.target.value)); if (!r.ok) return alert('프리셋 파일을 찾지 못했습니다.');
-  $('#fEq').value = ''; await loadEq(await r.arrayBuffer(), e.target.selectedOptions[0].textContent);
+  $('#fEq').value = ''; S.eq = { meta: await r.json(), frames: [], label: e.target.selectedOptions[0].textContent }; S.sel = 'eq'; ensureLevels(); buildPanel();
 };
 
-function tapBeat() {
-  if (S.eq?.meta.kind !== 'preset' || audio.paused) return;
-  const b = S.beat; b.taps.push(audio.currentTime);
-  if (b.taps.length >= 4) {      // 누른 시각들을 직선에 맞춰 박 간격과 첫 박 위치를 구한다
-    const d = b.taps.slice(1).map((t, i) => t - b.taps[i]).sort((x, y) => x - y), med = d[d.length >> 1];
-    const xs = b.taps.map(t => Math.round((t - b.taps[0]) / med)), n = xs.length, mx = xs.reduce((a, v) => a + v) / n, my = b.taps.reduce((a, v) => a + v) / n;
-    const slope = xs.reduce((a, x, i) => a + (x - mx) * (b.taps[i] - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
-    b.bpm = +(60 / slope).toFixed(2); b.first = +(my - slope * mx).toFixed(3);
-  }
-  syncBeat();
-}
-function syncBeat() { const b = S.beat; if ($('#bpm')) { $('#bpm').value = b.bpm || ''; $('#first').value = b.bpm ? b.first : ''; $('#tapN').textContent = b.taps.length ? `${b.taps.length}번 누름` : ''; } }
 
 // 오른쪽 조절판을 현재 고른 층(가사/이퀄라이저/제목)에 맞춰 다시 만든다
 let fxSel = 'o';      // 색과 효과에서 조절바가 맡고 있는 효과
@@ -476,15 +515,8 @@ function buildPanel() {
   const sz = S.sel === 'eq' ? [range(L, 'size', .3, 3, .01)] : [range(L, 'size', 20, 240, 1)]; sz[0].id = 'sizeI';
   P.append(head('크기'), row(S.sel === 'eq' ? '배율' : '글자 크기', ...sz), el('p', { className: 'hint', textContent: '화면에서 모서리 네모를 끌어도 됩니다.' }));
 
-  if (S.sel === 'eq' && S.eq.meta.kind === 'preset') {
-    const b = S.beat, bpm = el('input', { type: 'number', id: 'bpm', step: .01, min: 30, max: 300, placeholder: 'BPM' }), first = el('input', { type: 'number', id: 'first', step: .01, placeholder: '초' });
-    bpm.oninput = () => b.bpm = +bpm.value || 0; first.oninput = () => b.first = +first.value || 0;
-    P.append(head('박자 맞추기'), el('p', { className: 'hint', textContent: '노래를 재생하고, 마디의 첫 박부터 박자에 맞춰 아래 단추(또는 B 키)를 8번쯤 누르세요.' }),
-      row('', el('button', { className: 'btn', textContent: '박자 누르기 (B)', onclick: tapBeat }), el('button', { className: 'mini wide', textContent: '다시', onclick: () => { b.taps = []; b.bpm = 0; syncBeat(); } }), el('span', { id: 'tapN', className: 'hint' })),
-      row('빠르기', bpm), row('첫 박 위치', first));
-    syncBeat();
-  }
-  if (S.sel === 'eq' && S.eq.meta.kind !== 'preset') { P.append(el('p', { className: 'hint', textContent: '곡 전용 이퀄라이저는 색과 효과가 이미 들어 있어 위치와 크기만 조절합니다.' })); return; }
+  if (S.sel === 'eq' && S.eq.meta.kind === 'live') P.append(el('p', { className: 'hint', textContent: '이 프리셋은 음원의 소리 크기에 맞춰 저절로 움직입니다. 박자를 맞출 필요가 없습니다.' }));
+  if (S.sel === 'eq' && S.eq.meta.kind !== 'live') { P.append(el('p', { className: 'hint', textContent: '곡 전용 이퀄라이저는 색과 효과가 이미 들어 있어 위치와 크기만 조절합니다.' })); return; }
 
   if (S.sel !== 'eq') {      // 글꼴: 각 글꼴로 쓴 예시를 보고 고른다
     const sample = (S.sel === 'lyr' ? S.cues.find(c => c.text)?.text : L.title) || '가사 한 줄이 이렇게 보입니다';
@@ -620,7 +652,7 @@ function drawSummary() {
   const n = S.cues.filter(c => c.start != null && c.text).length;
   $('#summary').replaceChildren(...[
     ['영상', `${W}x${H} (${S.ratio}), ${FPS}fps`], ['길이', !S.dur ? '음원 없음' : S.crop.on ? `${fmt(span().b - span().a)} (원곡의 ${fmt(span().a)} ~ ${fmt(span().b)})` : fmt(S.dur)], ['가사', `${n}줄` + (n < S.cues.length ? ` (시점이 없는 ${S.cues.length - n}줄은 빠짐)` : '')],
-    ['파일', S.fmt === 'mp4' ? 'MP4' : 'MOV'], ['이퀄라이저', S.eq ? S.eq.label + (S.eq.meta.kind === 'preset' && !S.beat.bpm ? ' — 박자를 아직 안 맞춰 움직이지 않습니다' : '') : '없음'],
+    ['파일', S.fmt === 'mp4' ? 'MP4' : 'MOV'], ['이퀄라이저', S.eq ? S.eq.label : '없음'],
   ].map(([k, v]) => el('div', { className: 'row' }, el('label', { textContent: k }), el('span', { textContent: v }))));
 }
 let cancelled = false;
@@ -678,7 +710,7 @@ $('#render').onclick = async () => {
   $('#render').disabled = true; $('#cancel').hidden = false; $('#result').replaceChildren(); bar.hidden = false; bar.value = 0;
   let out, disk = null;
   try {
-    await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…';
+    await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…'; if (S.eq?.meta.kind === 'live') await ensureLevels();
     const wav = await readWav(S.audioFile); let pcm = null;
     if (!wav) {   // WAV가 아니면 소리를 풀어서 압축 없이 담는다
       const ac = new AudioContext(), ab = await ac.decodeAudioData(await S.audioFile.arrayBuffer()); ac.close();
@@ -738,7 +770,7 @@ function collect(full) {      // full=true 는 작업 전체(가사·시점 포�
   L.lyr.font = S.fonts.find(f => f.family === S.L.lyr.font)?.name ?? S.wantFont?.lyr ?? ''; L.ttl.font = S.fonts.find(f => f.family === S.L.ttl.font)?.name ?? S.wantFont?.ttl ?? '';
   const o = { app: 'lyricvideo', v: 1, ratio: S.ratio, fmt: S.fmt, bgFill: S.bgFill, bgFillMode: S.bgFillMode, fx: { ...S.fx }, L, eqFile: S.eqFile || '' };
   if (!full) { o.L.ttl.title = o.L.ttl.artist = ''; return o; }
-  return { ...o, cues: S.cues, rec: S.rec, crop: { ...S.crop }, beat: { bpm: S.beat.bpm, first: S.beat.first }, bgT: { ...S.bgT } };
+  return { ...o, cues: S.cues, rec: S.rec, crop: { ...S.crop }, bgT: { ...S.bgT } };
 }
 async function applyState(o) {
   if (o?.app !== 'lyricvideo') throw new Error('이 앱에서 저장한 파일이 아닙니다');
@@ -747,10 +779,10 @@ async function applyState(o) {
   for (const k of ['lyr', 'ttl']) { const f = S.fonts.find(f => f.name === S.wantFont[k]); if (f) S.L[k].font = f.family; }
   if (o.fx) Object.assign(S.fx, o.fx); if (o.fmt) S.fmt = o.fmt; if (o.bgFill) S.bgFill = o.bgFill; if (o.bgFillMode) S.bgFillMode = o.bgFillMode;
   if (o.cues) { S.cues = o.cues.map(c => ({ text: String(c.text ?? ''), start: c.start ?? null, end: c.end ?? null })); S.rec = Math.min(o.rec ?? S.cues.length, S.cues.length); $('#lyrics').value = S.cues.map(c => c.text).join('\n'); }
-  if (o.crop) Object.assign(S.crop, o.crop); if (o.beat) Object.assign(S.beat, o.beat, { taps: [] }); if (o.bgT) S.bgT = { zoom: 1, dx: 0, dy: 0, ...o.bgT };
+  if (o.crop) Object.assign(S.crop, o.crop); if (o.bgT) S.bgT = { zoom: 1, dx: 0, dy: 0, ...o.bgT };
   if (RATIOS.some(r => r[0] === o.ratio)) setRatio(o.ratio); else rebuildBg();
   sprites.clear(); loadAllFonts();
-  if (o.eqFile !== undefined && o.eqFile !== (S.eqFile || '')) { await presetsReady; const sel = $('#eqPreset'); if (!o.eqFile || [...sel.options].some(x => x.value === o.eqFile)) { sel.value = o.eqFile; await sel.onchange({ target: sel }); } }
+  if (o.eqFile !== undefined && o.eqFile !== (S.eqFile || '')) { await presetsReady; const sel = $('#eqPreset'); o.eqFile = o.eqFile.replace(/\.zip$/, '.json'); if (!o.eqFile || [...sel.options].some(x => x.value === o.eqFile)) { sel.value = o.eqFile; await sel.onchange({ target: sel }); } }
   go(step);
 }
 $('#projSave').onclick = () => save(new Blob([JSON.stringify(collect(true), null, 1)], { type: 'application/json' }), baseName() + '_작업.json');
@@ -774,5 +806,5 @@ $('#styleUndo').onclick = async () => {      // 저장 직전 스타일과 지�
 try { $('#styleUndo').hidden = localStorage.getItem(STYLE_PREV) == null; } catch {}
 try { const saved = localStorage.getItem(STYLE_KEY); if (saved) { applyState(JSON.parse(saved)).then(() => note('내 스타일을 불러왔습니다.')).catch(() => {}); } } catch {}
 
-window.__app = { collect, applyState, S, go, draw, frame, setRatio, rebuildBg, buildOut, drawSummary, loadEq, buildPanel, drawTable, drawRec, stamp, blank, undo, tapBeat, span, dims: () => [W, H] };
+window.__app = { collect, applyState, S, go, draw, frame, setRatio, rebuildBg, buildOut, drawSummary, loadEq, buildPanel, drawTable, drawRec, stamp, blank, undo, span, dims: () => [W, H] };
 go(1); tick();
