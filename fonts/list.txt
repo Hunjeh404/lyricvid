@@ -11,3 +11,4 @@ BlackHanSans-Regular.woff2 | 검은고딕
 DoHyeon-Regular.woff2 | 도현
 Pretendard-Regular.woff2 | 프리텐다드
 Pretendard-Bold.woff2 | 프리텐다드 굵게
+Dongle-Regular.woff2 | 동글
