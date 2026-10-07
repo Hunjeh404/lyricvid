@@ -44,7 +44,7 @@ const activeCue = t => S.cues.findIndex((c, i) => c.start != null && t >= c.star
 /* ---------- 화면 전환 ---------- */
 let step = 1;
 function go(n) {
-  step = n; audio.volume = 1;
+  step = n; audio.volume = 1; if (n !== 1) S.redo = null;
   $$('.step').forEach(b => b.classList.toggle('on', +b.dataset.step === n));
   $$('main > section').forEach(s => s.hidden = s.id !== 's' + n);
   if (n === 1) drawRec();
@@ -75,25 +75,27 @@ $('#applyLyrics').onclick = () => {
   S.cues = lines.map(text => ({ text, start: null, end: null })); S.rec = 0; drawRec();
 };
 function stamp() {
+  if (S.redo != null) { const c = S.cues[S.redo], t = audio.currentTime; c.start = t; if (c.end != null && c.end <= t) c.end = null; return go(2); }      // 한 줄만 다시 찍는 중: 찍으면 2번 화면으로 돌아간다
   if (S.rec >= S.cues.length || !S.audioFile) return;
   const c = S.cues[S.rec]; c.start = audio.currentTime; c.end = null; S.rec++; drawRec();
 }
 function blank() {
-  if (!S.rec) return; const c = S.cues[S.rec - 1];
+  if (S.redo != null || !S.rec) return; const c = S.cues[S.rec - 1];
   if (audio.currentTime > c.start) { c.end = audio.currentTime; drawRec(true); }
 }
 function undo() {
+  if (S.redo != null) return go(2);
   if (!S.rec) return; S.rec--;
   const c = S.cues[S.rec]; c.start = c.end = null;
   if (S.rec) S.cues[S.rec - 1].end = null;
   audio.currentTime = S.rec ? S.cues[S.rec - 1].start : 0; drawRec();
 }
 function drawRec(blanked) {
-  const c = S.cues, r = S.rec;
+  const c = S.cues, r = S.redo ?? S.rec;
   $('#recPrev').textContent = c[r - 1] ? c[r - 1].text : '';
   $('#recNow').textContent = c[r] ? c[r].text : (c.length ? '모든 줄을 찍었습니다. 2번 화면에서 다듬으세요.' : '왼쪽에 음원과 가사를 넣고 가사 적용을 누르세요.');
   $('#recNext').textContent = c[r + 1] ? c[r + 1].text : '';
-  $('#recCount').textContent = c.length ? `${r} / ${c.length}줄` + (blanked ? ' · 방금 줄을 여기서 지움' : '') : '';
+  $('#recCount').textContent = c.length ? (S.redo != null ? `${r + 1}번째 줄만 다시 찍는 중 · 다른 줄 시점은 그대로` : `${r} / ${c.length}줄`) + (blanked ? ' · 방금 줄을 여기서 지움' : '') : '';
 }
 $('#bStamp').onclick = stamp; $('#bBlank').onclick = blank; $('#bUndo').onclick = undo;
 
@@ -125,7 +127,7 @@ function drawTable() {
       el('td', {}, el('button', { className: 'mini', innerHTML: ICON.play, title: '이 줄부터 듣기', onclick: () => { if (c.start != null) { audio.currentTime = c.start; audio.play(); } } })),
       tIn('start'), tIn('end'), el('td', { className: 'grow' }, text),
       el('td', {},
-        el('button', { className: 'mini wide', onclick: () => { for (let j = i; j < S.cues.length; j++) S.cues[j].start = S.cues[j].end = null; if (i) S.cues[i - 1].end = null; S.rec = i; audio.currentTime = i ? S.cues[i - 1].start ?? 0 : 0; go(1); } }, ...lt('여기부터 다시 찍기', '다시 찍기')),
+        el('button', { className: 'mini wide', onclick: () => { audio.currentTime = Math.max(0, (S.cues[i - 1]?.start ?? (c.start ?? 0) - 3)); go(1); S.redo = i; drawRec(); } }, ...lt('이 줄 다시 찍기', '다시 찍기')),
         el('button', { className: 'mini', innerHTML: ICON.trash, title: '줄 삭제', onclick: () => { S.cues.splice(i, 1); if (S.rec > i) S.rec--; sprites.clear(); drawTable(); } }))));
   });
 }
@@ -356,7 +358,9 @@ function rebuildBg() {       // 배경 다시 그리기. zoom 1 = 화면을 꽉 
   g.imageSmoothingQuality = 'high'; g.drawImage(bmp, (W - dw) / 2 + T.dx, (H - dh) / 2 + T.dy, dw, dh); S.bg = c;
 }
 function nudgeBg(dx, dy) { if (!S.bgImg) return; S.bgT.dx = Math.round(S.bgT.dx) + dx; S.bgT.dy = Math.round(S.bgT.dy) + dy; rebuildBg(); if ($('#bgX')) { $('#bgX').value = S.bgT.dx; $('#bgY').value = S.bgT.dy; } }
-function fitStage() { stage.style.width = `min(100%, calc(72vh * ${W} / ${H}))`; $('#pvwrap').style.width = `min(100%, calc(56vh * ${W} / ${H}))`; }
+function fitStage() {      // 좁은 화면에서는 미리보기가 위에 붙어 있으므로 아래 조절 칸이 보이도록 높이를 덜 쓴다
+  const narrow = matchMedia('(max-width:900px)').matches; stage.style.width = `min(100%, calc(${narrow ? 45 : 72}vh * ${W} / ${H}))`; $('#pvwrap').style.width = `min(100%, calc(${narrow ? 45 : 56}vh * ${W} / ${H}))`;
+}
 function setRatio(name) {
   const r = RATIOS.find(x => x[0] === name); S.ratio = name; W = r[1]; H = r[2];
   for (const c of [cv, pv]) { c.width = W; c.height = H; } scratch = [mk(W, H), mk(W, H)]; rebuildBg(); fitStage();
@@ -752,9 +756,19 @@ $('#fProj').onchange = async e => {
   try { await applyState(JSON.parse(await f.text())); note('작업을 불러왔습니다. 음원, 배경 이미지, 곡 전용 이퀄라이저 파일은 다시 넣어 주세요.'); } catch (err) { alert('불러오지 못했습니다: ' + err.message); }
 };
 const note = t => { $('#styleNote').textContent = t; };
-$('#styleSave').onclick = () => { try { localStorage.setItem(STYLE_KEY, JSON.stringify(collect(false))); note('지금 꾸밈을 내 스타일로 저장했습니다. 다음에 열면 자동으로 적용됩니다.'); $('#styleClear').hidden = false; } catch { alert('이 브라우저에서는 저장할 수 없습니다(사생활 보호 모드일 수 있습니다).'); } };
-$('#styleClear').onclick = () => { try { localStorage.removeItem(STYLE_KEY); } catch {} note('내 스타일을 지웠습니다. 다음에 열면 기본 꾸밈으로 시작합니다.'); $('#styleClear').hidden = true; };
-try { const saved = localStorage.getItem(STYLE_KEY); if (saved) { $('#styleClear').hidden = false; applyState(JSON.parse(saved)).then(() => note('내 스타일을 불러왔습니다.')).catch(() => {}); } } catch {}
+const STYLE_PREV = 'lyricvideo-style-prev', STYLE_UNDONE = 'lyricvideo-style-undone';      // 저장 직전 스타일, 지금 되돌린 상태인지
+$('#styleSave').onclick = () => { try { localStorage.setItem(STYLE_PREV, localStorage.getItem(STYLE_KEY) || ''); localStorage.setItem(STYLE_KEY, JSON.stringify(collect(false))); localStorage.removeItem(STYLE_UNDONE); note('지금 꾸밈을 내 스타일로 저장했습니다. 다음에 열면 자동으로 적용됩니다.'); $('#styleUndo').hidden = false; } catch { alert('이 브라우저에서는 저장할 수 없습니다(사생활 보호 모드일 수 있습니다).'); } };
+$('#styleUndo').onclick = async () => {      // 저장 직전 스타일과 지금 스타일을 맞바꾼다. 한 번 누르면 취소, 또 누르면 취소한 저장이 되살아난다
+  try {
+    const cur = localStorage.getItem(STYLE_KEY) || '', prev = localStorage.getItem(STYLE_PREV) || '', redo = !!localStorage.getItem(STYLE_UNDONE);
+    if (prev) localStorage.setItem(STYLE_KEY, prev); else localStorage.removeItem(STYLE_KEY);
+    localStorage.setItem(STYLE_PREV, cur); if (redo) localStorage.removeItem(STYLE_UNDONE); else localStorage.setItem(STYLE_UNDONE, '1');
+    if (prev) await applyState(JSON.parse(prev));
+    note(redo ? '취소했던 스타일 저장을 되살렸습니다.' : prev ? '방금 저장을 취소하고 이전 스타일로 되돌렸습니다. 한 번 더 누르면 취소한 저장이 되살아납니다.' : '방금 저장을 취소했습니다. 이전에 저장한 스타일은 없습니다. 한 번 더 누르면 취소한 저장이 되살아납니다.');
+  } catch { alert('스타일을 되돌리지 못했습니다.'); }
+};
+try { $('#styleUndo').hidden = localStorage.getItem(STYLE_PREV) == null; } catch {}
+try { const saved = localStorage.getItem(STYLE_KEY); if (saved) { applyState(JSON.parse(saved)).then(() => note('내 스타일을 불러왔습니다.')).catch(() => {}); } } catch {}
 
 window.__app = { collect, applyState, S, go, draw, frame, setRatio, rebuildBg, buildOut, drawSummary, loadEq, buildPanel, drawTable, drawRec, stamp, blank, undo, tapBeat, span, dims: () => [W, H] };
 go(1); tick();

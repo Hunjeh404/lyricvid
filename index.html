@@ -22,7 +22,7 @@ nav { display:flex; gap:6px; flex-wrap:wrap; }
 #seek { flex:1; accent-color:var(--acc); } #time { font-variant-numeric:tabular-nums; color:var(--dim); min-width:120px; text-align:right; }
 main { padding:20px 24px 60px; max-width:1500px; margin:0 auto; }
 .cols { display:grid; grid-template-columns:minmax(280px,1fr) minmax(0,1.6fr); gap:20px; } .cols.wide { grid-template-columns:minmax(0,1.9fr) minmax(320px,1fr); }
-@media (max-width:900px) { .cols, .cols.wide { grid-template-columns:1fr; } }
+@media (max-width:900px) { .cols, .cols.wide { grid-template-columns:1fr; } #s3 > div:first-child, #s4 > div:first-child { display:contents; } #s3, #s4 { gap:12px; } #s3 .srcs, #s4 .stick + .card { margin-top:0 !important; } }   /* 한 줄 배치에서는 미리보기가 화면 끝까지 붙어 있도록 묶음을 푼다 */
 .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
 h3 { margin:0 0 12px; font-size:15px; } h4 { margin:18px 0 8px; font-size:13px; color:var(--acc); font-weight:600; } h4:first-child { margin-top:0; }
 .hint.warn { color:var(--acc); }
@@ -41,7 +41,7 @@ p.go { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; } #result { d
 .keys { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
 kbd { background:#12100e; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font:12px monospace; margin-left:6px; }
 .btn.big kbd { background:rgba(0,0,0,.14); border-color:rgba(0,0,0,.3); color:inherit; }
-.bar2 { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.bar2 { display:flex; gap:6px; align-items:stretch; margin-bottom:12px; } .card .bar2 > * { flex:0 1 auto; white-space:nowrap; justify-content:center; padding:0 10px; height:36px; margin:0; font-size:13px; min-width:0; }
 #live { font-size:22px; font-weight:700; min-height:1.6em; text-align:center; padding:10px; }
 table { width:100%; border-collapse:collapse; } td, th { padding:5px 6px; border-bottom:1px solid var(--line); white-space:nowrap; text-align:left; font-weight:400; }
 th { color:var(--dim); font-size:13px; } td.n { color:var(--dim); width:36px; } td.grow { width:100%; } tr.on td { background:#3a2d12; }
@@ -53,6 +53,7 @@ input.t { width:84px; text-align:center; font-variant-numeric:tabular-nums; padd
 .chk.free { width:auto; margin:6px 0; }
 #stage { position:relative; margin:0 auto; border-radius:10px; overflow:hidden; border:1px solid var(--line); touch-action:none; user-select:none; cursor:grab; }
 #cv { display:block; width:100%; height:auto; }
+.stick { position:sticky; top:59px; z-index:4; background:var(--bg); padding-bottom:8px; }   /* 미리보기는 재생 막대 바로 아래에 붙어 있는다 */
 #selbox { position:absolute; outline:2px dashed var(--acc); outline-offset:4px; pointer-events:none; }
 #handle { position:absolute; right:-12px; bottom:-12px; width:16px; height:16px; background:var(--acc); border:2px solid #000; border-radius:3px; pointer-events:auto; cursor:nwse-resize; }
 #gv, #gh { position:absolute; background:var(--acc); pointer-events:none; } #gv { left:50%; top:0; bottom:0; width:2px; } #gh { top:50%; left:0; right:0; height:2px; }
@@ -69,7 +70,7 @@ input.t { width:84px; text-align:center; font-variant-numeric:tabular-nums; padd
 .chk { display:inline-flex; align-items:center; gap:6px; width:132px; white-space:nowrap; flex:none; } .chk input { accent-color:var(--acc); }
 .posrow { display:flex; gap:16px; align-items:flex-start; }
 .grid9 { display:grid; grid-template-columns:repeat(3,30px); gap:4px; flex:none; } .grid9 button { height:30px; border:1px solid var(--line); background:#12100e; border-radius:5px; cursor:pointer; } .grid9 button.on { background:var(--acc); border-color:var(--acc); }
-.fonts { display:grid; gap:6px; max-height:300px; overflow:auto; margin-bottom:8px; }
+.fonts { display:grid; gap:6px; max-height:222px; overflow:auto; margin-bottom:8px; }
 .fonts button { text-align:left; background:#12100e; border:1px solid var(--line); border-radius:8px; padding:8px 12px; color:var(--text); cursor:pointer; display:grid; gap:2px; }
 .fonts button.on { border-color:var(--acc); } .fs { font-size:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .fn { font-size:12px; color:var(--dim); font-family:inherit; }
 progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; }
@@ -82,7 +83,7 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
   .step { flex:1; padding:6px 2px; font-size:13px; white-space:nowrap; } .step b { margin-right:3px; }
   .tools .mini { flex:1 1 auto; justify-content:center; padding:0 4px; margin:0; font-size:12px; white-space:nowrap; }
   .keys { flex-wrap:nowrap; gap:6px; } .keys kbd { display:none; } .keys .btn { padding:10px 12px; white-space:nowrap; } .keys .btn.big { flex:1; justify-content:center; padding:12px; font-size:16px; }
-  .bar2 { gap:6px; } .bar2 .mini.wide { margin:0; padding:0 8px; }
+  .bar2 { gap:4px; } .card .bar2 > * { flex:1 1 auto; padding:0 4px; gap:3px; }
   .hint .mo { white-space:nowrap; } .ltab { padding:8px 2px; font-size:13px; white-space:nowrap; }
   thead { display:none; } #rows tr { display:grid; grid-template-columns:20px 32px 1fr 1fr; align-items:center; border-bottom:1px solid var(--line); padding:3px 0; }
   #rows td { border:0; padding:2px 0; width:auto; } #rows td.grow { grid-column:1 / 4; width:auto; } #rows td:last-child { text-align:right; }
@@ -96,16 +97,16 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
 <header>
   <h1>가사 영상 만들기</h1>
   <nav>
-    <button class="step" data-step="1"><b>1</b><span class="pc">시점 기록</span><span class="mo">기록</span></button>
-    <button class="step" data-step="2"><b>2</b><span class="pc">세부 수정</span><span class="mo">수정</span></button>
-    <button class="step" data-step="3"><b>3</b><span class="pc">꾸미기와 배치</span><span class="mo">꾸미기</span></button>
-    <button class="step" data-step="4"><b>4</b><span class="pc">영상 뽑기</span><span class="mo">뽑기</span></button>
+    <button class="step" data-step="1"><b>1</b>올리기</button>
+    <button class="step" data-step="2"><b>2</b>가사수정</button>
+    <button class="step" data-step="3"><b>3</b>꾸미기</button>
+    <button class="step" data-step="4"><b>4</b>만들기</button>
   </nav>
   <div class="tools">
     <button class="mini wide" id="projSave" title="가사, 시점, 꾸밈을 파일 하나로 저장"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M6 4h10l4 4v10a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2" /> <path d="M10 14a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M14 4l0 4l-6 0l0 -4" /> </svg> <span class="pc">작업 저장</span><span class="mo">저장</span></button>
     <label class="mini wide" title="저장해 둔 작업 파일 불러오기"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2" /> </svg> <span class="pc">작업 불러오기</span><span class="mo">불러오기</span><input type="file" id="fProj" accept=".json" hidden></label>
     <button class="mini wide" id="styleSave" title="지금 글꼴, 색, 효과, 위치, 비율, 전환을 기본 꾸밈으로 기억"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4" /> </svg> <span class="pc">내 스타일로 저장</span><span class="mo">스타일 저장</span></button>
-    <button class="mini wide" id="styleClear" hidden><span class="pc">내 스타일 지우기</span><span class="mo">스타일 삭제</span></button>
+    <button class="mini wide" id="styleUndo" title="방금 한 스타일 저장을 취소하고 이전 스타일로. 한 번 더 누르면 취소한 저장을 되살립니다" hidden><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M9 14l-4 -4l4 -4" /> <path d="M5 10h11a4 4 0 1 1 0 8h-1" /> </svg> 되돌리기</button>
   </div>
 </header>
 <p class="hint" id="styleNote" style="margin:6px 24px 0"></p>
@@ -120,7 +121,6 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
     <div class="card">
       <h3>재료</h3>
       <label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /> <path d="M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /> <path d="M9 17v-13h10v13" /> <path d="M9 8h10" /> </svg> 음원 고르기<input type="file" id="fAudio" accept="audio/*,.wav"></label><span class="fname" id="audioName"></span>
-      <p class="hint">WAV를 넣으면 영상에 원본 소리 그대로 담깁니다. 파일은 이 컴퓨터 밖으로 나가지 않습니다.</p>
       <h4>가사</h4>
       <textarea id="lyrics" placeholder="가사를 붙여 넣으세요. 한 줄이 자막 한 줄이 됩니다."></textarea>
       <p><button class="btn" id="applyLyrics">가사 적용</button></p>
@@ -141,20 +141,19 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
   <section id="s2" hidden>
     <div class="card">
       <div class="bar2">
-        <label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg> SRT 불러오기<input type="file" id="fSrt" accept=".srt,.txt"></label>
-        <button class="btn ghost" id="srtDown"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /> </svg> SRT 내려받기</button>
-        <span class="hint">전체 시점</span><button class="mini wide" id="shiftM"><span class="pc">0.1초 당기기</span><span class="mo">-0.1초</span></button><button class="mini wide" id="shiftP"><span class="pc">0.1초 밀기</span><span class="mo">+0.1초</span></button>
-        <button class="mini wide" id="addRow">줄 추가</button>
+        <label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 9l5 -5l5 5" /> <path d="M12 4l0 12" /> </svg> 불러오기<input type="file" id="fSrt" accept=".srt,.txt"></label>
+        <button class="btn ghost" id="srtDown"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /> </svg> 내려받기</button>
+        <button class="mini wide" id="shiftM" title="전체 시점을 0.1초 당기기">-0.1s</button><button class="mini wide" id="shiftP" title="전체 시점을 0.1초 밀기">+0.1s</button>
+        <button class="mini wide" id="addRow" title="줄 추가">+1줄</button>
       </div>
       <div id="live"></div>
       <table><thead><tr><th>#</th><th></th><th>시작</th><th>끝</th><th>가사</th><th></th></tr></thead><tbody id="rows"></tbody></table>
-      <p class="hint">시점은 분:초 형식입니다(예 1:23.45). 끝을 비워 두면 다음 줄이 시작될 때까지 보입니다.</p>
     </div>
   </section>
 
   <section id="s3" class="cols wide" hidden>
     <div>
-      <div id="stage"><canvas id="cv" width="2560" height="1440"></canvas><div id="gv" hidden></div><div id="gh" hidden></div><div id="selbox" hidden><div id="handle"></div></div></div>
+      <div class="stick"><div id="stage"><canvas id="cv" width="2560" height="1440"></canvas><div id="gv" hidden></div><div id="gh" hidden></div><div id="selbox" hidden><div id="handle"></div></div></div></div>
       <p class="hint warn" id="overlap" hidden>가사, 이퀄라이저, 제목 중 겹치는 것이 있습니다. 끌어서 자리를 옮기거나 크기를 줄여 보세요.</p>
       <div class="card srcs">
         <div><label class="file"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path stroke="none" d="M0 0h24v24H0z" fill="none" /> <path d="M15 8h.01" /> <path d="M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12" /> <path d="M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5" /> <path d="M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3" /> </svg> 배경 이미지<input type="file" id="fBg" accept="image/*"></label><span class="fname" id="bgName"></span></div>
@@ -170,11 +169,11 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
 
   <section id="s4" class="cols wide" hidden>
     <div>
-      <div id="pvwrap"><canvas id="pv" width="2560" height="1440"></canvas></div>
+      <div class="stick"><div id="pvwrap"><canvas id="pv" width="2560" height="1440"></canvas></div></div>
       <div class="card" style="margin-top:14px">
-        <h3>영상 뽑기</h3>
+        <h3>영상 만들기</h3>
         <div id="summary"></div>
-        <p class="go"><button class="btn big" id="render">영상 만들기</button><button class="btn ghost" id="cancel" hidden>취소</button><span id="result"></span></p>
+        <p class="go"><button class="btn" id="render">만들기</button><button class="btn ghost" id="cancel" hidden>취소</button><span id="result"></span></p>
         <progress id="prog" value="0" max="1" hidden></progress>
         <p id="status" class="hint"></p>
       </div>
