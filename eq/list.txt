@@ -1,3 +1,12 @@
 # 범용 이퀄라이저 프리셋 목록. 한 줄에 하나씩:  파일이름 | 화면에 보일 이름
 # 프리셋 파일(zip)을 이 폴더에 넣고 아래에 한 줄을 추가하면 앱에 나타납니다.
-basic-bars.zip | 기본 막대 (시험용)
+slim-round-bars.zip | 가는 둥근 막대
+square-bars.zip | 각진 막대
+bold-capsules.zip | 굵은 캡슐
+dot-matrix.zip | 점 배열
+segmented-tiles.zip | 타일 배열
+smooth-line.zip | 부드러운 곡선
+angular-line.zip | 각진 파형
+tapered-spikes.zip | 마름모 파형
+upward-columns.zip | 위로 뻗는 막대
+dense-thin-wave.zip | 촘촘한 가는 막대
