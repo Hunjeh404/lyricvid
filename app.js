@@ -323,7 +323,7 @@ function setRatio(name) {
 }
 $('#fBg').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  S.bgImg = await createImageBitmap(f); S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg();
+  S.bgImg = S.bgSrc = await createImageBitmap(f); S.bgUp = 1; S.bgFile = f.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg(); try { localStorage.removeItem(UP_FAIL); } catch {}
   $('#bgName').textContent = `${f.name} (${S.bgImg.width}x${S.bgImg.height})`; if (S.sel === 'bg') buildPanel();
 };
 
@@ -392,7 +392,7 @@ function buildPanel() {
     P.append(el('p', { className: 'hint', textContent: `지금 ${W}x${H}. 짧은 변이 1440이 되도록 맞춥니다.` }), head('배경 이미지'));
     if (!S.bgImg) { P.append(el('p', { className: 'hint', textContent: '화면 아래에서 배경 이미지를 넣으세요.' })); return; }
     const T = S.bgT, bmp = S.bgImg, cover = Math.max(W / bmp.width, H / bmp.height);
-    const fits = [['가로 맞춤', W / bmp.width / cover], ['세로 맞춤', H / bmp.height / cover], ['원본 크기', 1 / cover]];
+    const fits = [['가로 맞춤', W / bmp.width / cover], ['세로 맞춤', H / bmp.height / cover], ['원본 크기', 1 / cover / (S.bgUp || 1)]];
     const z = el('input', { type: 'range', min: .1, max: 5, step: .001, value: T.zoom }), zp = el('input', { type: 'number', min: 10, max: 500, step: 1, value: Math.round(T.zoom * 100) }), zn = el('span', { className: 'hint' });
     const label = () => { const f = fits.find(f => Math.abs(f[1] - T.zoom) < 1e-6); zn.textContent = f ? f[0] + '에 붙음' : ''; };
     z.oninput = () => { let v = +z.value; const f = fits.find(f => Math.abs(f[1] - v) < .025 * f[1] + .004); if (f) v = f[1]; T.zoom = v; zp.value = Math.round(v * 100); label(); rebuildBg(); };
@@ -600,6 +600,29 @@ async function openDisk(est) {   // 임시 파일 열기. 못 쓰는 상황이�
   } catch { await removeTmp(); dropLock(); return null; }
 }
 cleanTmp();
+
+/* ---------- 배경 업스케일: 영상을 만들기 직전에, 배경이 화면보다 작게 쓰이면 물어보고 키운다 ---------- */
+const UP_FAIL = 'lyricvid-up-fail', UP_RUN = 'lyricvid-up-run';      // 처리 도중 탭이 꺼지면 UP_RUN 이 남아 다음에 열 때 실패로 센다
+try { if (localStorage.getItem(UP_RUN)) { localStorage.removeItem(UP_RUN); localStorage.setItem(UP_FAIL, (+localStorage.getItem(UP_FAIL) || 0) + 1); } } catch {}
+async function upscaleBg(st, bar) {
+  const src = S.bgSrc; if (!src) return;
+  const need = Math.max(W / src.width, H / src.height) * S.bgT.zoom;      // 원본 한 픽셀이 화면에서 몇 배로 늘어나는지
+  if (need <= (S.bgUp || 1) * 1.001 || S.bgUp >= 4) return;
+  let fails = 0; try { fails = +localStorage.getItem(UP_FAIL) || 0; } catch {}
+  if (fails >= 2) { alert('메모리가 부족해 이 기기에서는 배경 업스케일을 할 수 없습니다. 원본 그대로 영상을 만듭니다.'); return; }
+  const U = await import('./upscale.js'), gpu = await U.hasGpu();
+  if (!confirm(`배경 이미지가 화면보다 작습니다(${need.toFixed(2)}배 필요). 업스케일할까요?` + (fails ? '\n지난번에 실패했습니다. 한 번 더 시도합니다.' : '') + (gpu ? '' : '\n이 기기는 그래픽 가속이 안 돼 몇 분 걸릴 수 있습니다.') + '\n취소를 누르면 원본 그대로 만듭니다.')) return;
+  try { localStorage.setItem(UP_RUN, '1'); } catch {}
+  try {
+    const up = await U.upscale(src, need, gpu, p => { if (cancelled) throw new Error('cancel'); bar.value = p; st.textContent = `배경 업스케일 중… ${Math.round(p * 100)}%`; });
+    S.bgImg = up; S.bgUp = up.width / src.width; rebuildBg(); $('#bgName').textContent = `${S.bgFile} (${src.width}x${src.height} → ${up.width}x${up.height})`;
+    try { localStorage.removeItem(UP_FAIL); } catch {}
+  } catch (err) {
+    if (err.message === 'cancel') throw err;
+    try { localStorage.setItem(UP_FAIL, fails + 1); } catch {}
+    alert(fails ? '메모리가 부족해 이 기기에서는 배경 업스케일을 할 수 없습니다. 원본 그대로 영상을 만듭니다.' : '배경 업스케일에 실패했습니다. 원본 그대로 영상을 만듭니다. 다음에 한 번 더 시도할 수 있습니다.');
+  } finally { try { localStorage.removeItem(UP_RUN); } catch {} bar.value = 0; }
+}
 $('#render').onclick = async () => {
   if (!S.audioFile) return alert('음원을 먼저 넣어 주세요.');
   if (!window.VideoEncoder) return alert('이 브라우저에서는 영상을 만들 수 없습니다. 컴퓨터의 크롬이나 엣지에서 열어 주세요.');
@@ -607,7 +630,7 @@ $('#render').onclick = async () => {
   $('#render').disabled = true; $('#cancel').hidden = false; $('#result').replaceChildren(); bar.hidden = false; bar.value = 0;
   let out, disk = null;
   try {
-    await loadAllFonts(); st.textContent = '음원을 읽는 중…';
+    await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…';
     const wav = await readWav(S.audioFile); let pcm = null;
     if (!wav) {   // WAV가 아니면 소리를 풀어서 압축 없이 담는다
       const ac = new AudioContext(), ab = await ac.decodeAudioData(await S.audioFile.arrayBuffer()); ac.close();
@@ -650,6 +673,7 @@ $('#render').onclick = async () => {
     const mime = mp4 ? 'video/mp4' : 'video/quicktime', blob = disk ? (f => f.slice(0, f.size, mime))(await disk.handle.getFile()) : new Blob([out.target.buffer], { type: mime }), name = baseName() + (S.crop.on ? '_cut' : '') + (S.ratio === '16:9' ? '' : '_' + S.ratio.replace(':', 'x')) + (mp4 ? '.mp4' : '.mov'); bar.value = 1;
     st.textContent = (mp4 && (aCodec !== 'aac' || codec !== 'avc') ? '이 브라우저가 H.264나 AAC를 지원하지 않아 다른 방식으로 담았습니다. 텔레비전이나 모니터에서 안 열릴 수 있으니 크롬이나 엣지에서 다시 뽑아 보세요.' : '');
     $('#result').append(el('button', { className: 'btn', innerHTML: ICON.download + ` 저장: ${Math.round(blob.size / 1048576)}MB`, title: name, onclick: () => save(blob, name) }));
+    if (S.bgUp > 1) $('#result').append(el('button', { className: 'btn ghost', innerHTML: ICON.download + ' 배경', title: '업스케일한 배경 이미지 저장', onclick: async () => { const c = mk(S.bgImg.width, S.bgImg.height); c.getContext('2d').drawImage(S.bgImg, 0, 0); save(await new Promise(r => c.toBlob(r, 'image/png')), S.bgFile.replace(/\.[^.]+$/, '') + `_${S.bgImg.width}x${S.bgImg.height}.png`); } }));
     window.__lastBlob = blob; window.__lastMode = disk ? 'disk' : 'memory'; save(blob, name);
   } catch (err) {
     if (out && out.state !== 'finalized') await out.cancel().catch(() => {});
