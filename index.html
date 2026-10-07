@@ -32,6 +32,7 @@ textarea { width:100%; min-height:300px; resize:vertical; } select { max-width:1
 .btn { display:inline-flex; align-items:center; gap:6px; background:var(--acc); color:var(--acc-ink); border:0; border-radius:8px; padding:9px 16px; font:inherit; font-weight:600; cursor:pointer; }
 .btn.ghost { background:none; color:var(--text); border:1px solid var(--line); font-weight:400; } .btn:disabled { opacity:.5; cursor:default; }
 .btn.big { padding:16px 22px; font-size:17px; }
+p.go { display:flex; gap:8px; align-items:stretch; flex-wrap:wrap; } #result { display:flex; } #result:empty { display:none; } .row .mini.end { margin-left:auto; flex:none; }
 .file { display:inline-flex; align-items:center; gap:6px; border:1px dashed var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; color:var(--text); }
 .file input { display:none; } .fname { color:var(--dim); font-size:13px; margin-left:8px; word-break:break-all; }
 .rec { text-align:center; padding:26px 10px; } .rec div { min-height:1.6em; }
@@ -81,8 +82,7 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
   thead { display:none; } #rows tr { display:grid; grid-template-columns:20px 32px 1fr 1fr; align-items:center; border-bottom:1px solid var(--line); padding:3px 0; }
   #rows td { border:0; padding:2px 0; width:auto; } #rows td.grow { grid-column:1 / 4; width:auto; } #rows td:last-child { text-align:right; }
   input.t { width:58px; margin:0 1px; padding:6px 2px; font-size:13px; } input.t::placeholder { font-size:10px; } #rows tr.on { background:#3a2d12; } input.txt { min-width:0; } #rows .mini.wide { padding:0 6px; }
-  #outPanel .row > label:first-child { width:auto; min-width:26px; } #outPanel .row select { flex:1 1 0; width:0; min-width:0; } #outPanel .row input[type=number] { width:62px; }
-  #outPanel .btn.ghost { padding:9px 12px; }
+  #outPanel .row > label:first-child { width:auto; min-width:26px; } #outPanel .row select { flex:1 1 0; width:0; min-width:0; font-size:13px; padding:8px 4px; } #outPanel .row input[type=number] { width:62px; }
   .ratios { flex-wrap:nowrap; overflow-x:auto; position:relative; padding-bottom:4px; } .cols > * { min-width:0; }
 }
 </style>
@@ -169,11 +169,9 @@ progress { width:100%; height:12px; accent-color:var(--acc); margin:14px 0 6px; 
       <div class="card" style="margin-top:14px">
         <h3>영상 뽑기</h3>
         <div id="summary"></div>
-        <p class="hint">위 화면은 완성 영상과 똑같이 보여 줍니다. 만드는 동안 이 창을 닫지 마세요.</p>
-        <p><button class="btn big" id="render">영상 만들기</button> <button class="btn ghost" id="cancel" hidden>취소</button></p>
+        <p class="go"><button class="btn big" id="render">영상 만들기</button><button class="btn ghost" id="cancel" hidden>취소</button><span id="result"></span></p>
         <progress id="prog" value="0" max="1" hidden></progress>
         <p id="status" class="hint"></p>
-        <div id="result"></div>
       </div>
     </div>
     <div class="card" id="outPanel"></div>

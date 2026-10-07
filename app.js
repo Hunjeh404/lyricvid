@@ -548,19 +548,18 @@ function buildOut() {
       row('', el('button', { className: 'btn ghost', innerHTML: ICON.download + ' 자른 영상 기준 SRT', onclick: () => { const { a, b } = span(); save(new Blob([makeSrt(a, b)], { type: 'text/plain' }), baseName() + '_cut.srt'); } })));
   }
 
-  P.append(head('파일 형식'), el('div', { className: 'ratios' }, ...[['mov', 'MOV · 소리 원본 그대로', 'MOV 원본 소리'], ['mp4', 'MP4 · 어디서나 재생', 'MP4 호환']].map(([v, t, m]) => { const b = el('button', { className: 'seg' + (S.fmt === v ? ' on' : '') }, ...lt(t, m)); b.onclick = () => { S.fmt = v; buildOut(); drawSummary(); }; return b; })),
-    S.fmt === 'mp4' ? hint('MP4는 텔레비전, 모니터의 USB 재생, 메신저 등 거의 어디서나 열립니다. 대신 소리를 AAC 고음질로 압축하므로 원본과 똑같지는 않습니다.', '어디서나 재생. 소리는 AAC로 압축.') : hint('MOV는 소리를 원본 그대로 담습니다. 유튜브에 올리거나 편집할 때 알맞습니다.', '소리 원본 그대로. 유튜브·편집용.'));
+  P.append(head('파일 형식'), el('div', { className: 'ratios' }, ...[['mov', 'MOV(원본 음질)'], ['mp4', 'MP4(AAC 압축)']].map(([v, t]) => { const b = el('button', { className: 'seg' + (S.fmt === v ? ' on' : ''), textContent: t }); b.onclick = () => { S.fmt = v; buildOut(); drawSummary(); }; return b; })));
   const TYPES = [['none', '없음'], ['black', '검은 화면'], ['white', '흰 화면'], ['blur', '흐림에서 선명하게'], ['zoom', '확대에서 제자리로'], ['wipe', '닦아내기'], ['iris', '원형 열림']];
+  const OUT = { blur: '선명함에서 흐리게', zoom: '제자리에서 확대로', iris: '원형 닫힘' }, TYPES_OUT = TYPES.map(([v, t]) => [v, OUT[v] || t]);      // 끝 전환은 거꾸로 재생되므로 이름도 거꾸로
+  const view = (title, onclick) => el('button', { className: 'mini end', innerHTML: ICON.play, title, onclick });
   const DIRS = [['lr', '왼쪽에서 오른쪽'], ['rl', '오른쪽에서 왼쪽'], ['tb', '위에서 아래'], ['bt', '아래에서 위']];
   const opt = (obj, key, list) => { const s = el('select'); for (const [v, t] of list) s.append(el('option', { value: v, textContent: t, selected: obj[key] === v })); s.onchange = () => { obj[key] = s.value; buildOut(); drawSummary(); }; return s; };
   const secs = key => { const i = el('input', { type: 'number', value: F[key], min: 0, max: 15, step: .1 }); i.oninput = () => { F[key] = clamp(+i.value || 0, 0, 15); }; return i; };
   P.append(head('시작과 끝 화면전환'),
-    row('시작', opt(F, 'inType', TYPES), secs('inDur'), el('span', { className: 'hint', textContent: '초' })), ...(F.inType === 'wipe' ? [row('', opt(F, 'inDir', DIRS))] : []),
-    row('끝', opt(F, 'outType', TYPES), secs('outDur'), el('span', { className: 'hint', textContent: '초' })), ...(F.outType === 'wipe' ? [row('', opt(F, 'outDir', DIRS))] : []));
+    row('시작', opt(F, 'inType', TYPES), secs('inDur'), el('span', { className: 'hint', textContent: '초' }), view('시작 전환 보기', () => listen(span().a))), ...(F.inType === 'wipe' ? [row('', opt(F, 'inDir', DIRS))] : []),
+    row('끝', opt(F, 'outType', TYPES_OUT), secs('outDur'), el('span', { className: 'hint', textContent: '초' }), view('끝 전환 보기', () => listen(span().b - F.outDur - 1.5))), ...(F.outType === 'wipe' ? [row('', opt(F, 'outDir', DIRS))] : []));
   const au = el('input', { type: 'checkbox', checked: F.audio }); au.onchange = () => { F.audio = au.checked; drawSummary(); };
-  P.append(el('label', { className: 'chk free' }, au, '소리도 같은 길이로 서서히 키우고 줄이기'),
-    hint('소리 전환을 켜면 전환 구간의 소리만 달라지고, 그 밖은 원본 그대로입니다. 압축은 하지 않습니다.', '전환 구간 소리만 바뀝니다. 압축 없음.'),
-    row('', el('button', { className: 'btn ghost', onclick: () => listen(span().a) }, ...lt('시작 전환 보기', '시작 보기')), el('button', { className: 'btn ghost', onclick: () => listen(span().b - F.outDur - 1.5) }, ...lt('끝 전환 보기', '끝 보기'))));
+  P.append(el('label', { className: 'chk free' }, au, '소리도 같은 길이로 서서히 키우고 줄이기'));
 }
 function wavFloat(w) {      // WAV 소리를 압축기에 넣을 수 있게 소수 값으로 풀기(MP4용)
   const n = w.data.byteLength / w.bpf, bps = w.bits / 8, dv = new DataView(w.data.buffer, w.data.byteOffset, w.data.byteLength), chans = [...Array(w.ch)].map(() => new Float32Array(n));
@@ -573,7 +572,7 @@ function drawSummary() {
   const n = S.cues.filter(c => c.start != null && c.text).length;
   $('#summary').replaceChildren(...[
     ['영상', `${W}x${H} (${S.ratio}), ${FPS}fps`], ['길이', !S.dur ? '음원 없음' : S.crop.on ? `${fmt(span().b - span().a)} (원곡의 ${fmt(span().a)} ~ ${fmt(span().b)})` : fmt(S.dur)], ['가사', `${n}줄` + (n < S.cues.length ? ` (시점이 없는 ${S.cues.length - n}줄은 빠짐)` : '')],
-    ['배경', S.bg ? '넣음' : '없음 (어두운 단색)'], ['파일', S.fmt === 'mp4' ? 'MP4' : 'MOV'], ['소리', S.fmt === 'mp4' ? 'AAC 고음질로 압축 (원본과 같지 않음)' : S.fx.audio && (S.fx.inDur || S.fx.outDur) ? '압축 없이 담고, 시작과 끝만 서서히 조절' : '원본 그대로'], ['이퀄라이저', S.eq ? S.eq.label + (S.eq.meta.kind === 'preset' && !S.beat.bpm ? ' — 박자를 아직 안 맞춰 움직이지 않습니다' : '') : '없음'],
+    ['파일', S.fmt === 'mp4' ? 'MP4' : 'MOV'], ['이퀄라이저', S.eq ? S.eq.label + (S.eq.meta.kind === 'preset' && !S.beat.bpm ? ' — 박자를 아직 안 맞춰 움직이지 않습니다' : '') : '없음'],
   ].map(([k, v]) => el('div', { className: 'row' }, el('label', { textContent: k }), el('span', { textContent: v }))));
 }
 let cancelled = false;
@@ -649,8 +648,8 @@ $('#render').onclick = async () => {
     }
     await pushAudio(Infinity); st.textContent = '파일로 묶는 중…'; await out.finalize();
     const mime = mp4 ? 'video/mp4' : 'video/quicktime', blob = disk ? (f => f.slice(0, f.size, mime))(await disk.handle.getFile()) : new Blob([out.target.buffer], { type: mime }), name = baseName() + (S.crop.on ? '_cut' : '') + (S.ratio === '16:9' ? '' : '_' + S.ratio.replace(':', 'x')) + (mp4 ? '.mp4' : '.mov'); bar.value = 1;
-    st.textContent = `완료. ${(blob.size / 1048576).toFixed(1)}MB, 영상 압축 방식 ${codec.toUpperCase()}, 소리 ${mp4 ? aCodec.toUpperCase() + ' 고음질 압축' : wav ? (fi || fo ? '압축 없이 담고 시작과 끝만 서서히 조절' : '원본 WAV 그대로') : '압축 없이(풀어서) 담음'}.` + (mp4 && (aCodec !== 'aac' || codec !== 'avc') ? ' 이 브라우저가 H.264나 AAC를 지원하지 않아 다른 방식으로 담았습니다. 텔레비전이나 모니터에서 안 열릴 수 있으니 크롬이나 엣지에서 다시 뽑아 보세요.' : '');
-    $('#result').append(el('button', { className: 'btn', innerHTML: ICON.download + ' ' + name + ' 저장', onclick: () => save(blob, name) }));
+    st.textContent = (mp4 && (aCodec !== 'aac' || codec !== 'avc') ? '이 브라우저가 H.264나 AAC를 지원하지 않아 다른 방식으로 담았습니다. 텔레비전이나 모니터에서 안 열릴 수 있으니 크롬이나 엣지에서 다시 뽑아 보세요.' : '');
+    $('#result').append(el('button', { className: 'btn', innerHTML: ICON.download + ` 저장: ${Math.round(blob.size / 1048576)}MB`, title: name, onclick: () => save(blob, name) }));
     window.__lastBlob = blob; window.__lastMode = disk ? 'disk' : 'memory'; save(blob, name);
   } catch (err) {
     if (out && out.state !== 'finalized') await out.cancel().catch(() => {});
