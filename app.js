@@ -255,6 +255,45 @@ function draw(g, t, edit) {
   return boxes;
 }
 
+/* ---------- 색 고르기 창: 기본 색, 배경 그림에서 뽑은 색, RGB 숫자 ---------- */
+const BASIC = [['검정', '#000000'], ['흰색', '#ffffff'], ['빨강', '#ff0000'], ['파랑', '#0000ff'], ['노랑', '#ffff00'], ['초록', '#00b050']];
+const hex = (r, g, b) => '#' + [r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+const rgbOf = h => /^#[0-9a-f]{6}$/i.test(h || '') ? [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) : [0, 0, 0];
+let palFor = null, pal = [];
+function bgPalette() {       // 배경 그림에서 서로 다른 대표 색 여섯 개(넓게 쓰인 색과 눈에 띄는 색을 섞어, 밝은 순)
+  const bmp = S.bgSrc || S.bgImg; if (!bmp) return []; if (palFor === bmp) return pal;
+  const n = 72, c = mk(n, n), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0, n, n);
+  const d = g.getImageData(0, 0, n, n).data, bins = new Map();
+  for (let i = 0; i < d.length; i += 4) { const k = (d[i] >> 4) << 8 | (d[i + 1] >> 4) << 4 | d[i + 2] >> 4, b = bins.get(k) || [0, 0, 0, 0]; b[0] += d[i]; b[1] += d[i + 1]; b[2] += d[i + 2]; b[3]++; bins.set(k, b); }
+  const cand = [...bins.values()].filter(x => x[3] >= 3).map(([r, g2, b, m]) => { const v = [r / m, g2 / m, b / m], mx = Math.max(...v), mn = Math.min(...v); return { v, m, sat: mx ? (mx - mn) / mx : 0 }; });
+  const out = [], take = (list, n, far) => { for (const q of list) { if (out.length >= n) break; if (out.every(o => Math.hypot(o[0] - q.v[0], o[1] - q.v[1], o[2] - q.v[2]) > far)) out.push(q.v); } };
+  const byArea = [...cand].sort((a, b) => b.m - a.m), byAccent = [...cand].sort((a, b) => b.sat * b.sat * Math.sqrt(b.m) - a.sat * a.sat * Math.sqrt(a.m));
+  take(byArea, 3, 90); take(byAccent, 6, 80);       // 넓게 쓰인 색 셋, 그다음 눈에 띄는 색으로 채운다
+  for (let far = 60; out.length < 6 && far >= 20; far -= 20) take(byArea, 6, far);
+  const lum = v => .299 * v[0] + .587 * v[1] + .114 * v[2];
+  palFor = bmp; return pal = out.sort((a, b) => lum(b) - lum(a)).map(v => hex(...v));
+}
+function colorBtn(get, set) {
+  const sw = el('button', { className: 'sw', title: '색 고르기' }); sw.style.background = get();
+  sw.onclick = () => {
+    let [r, g, b] = rgbOf(get());
+    const back = el('div', { className: 'cpback' }), box = el('div', { className: 'cp' }), prev = el('span', { className: 'cpprev' }), code = el('span', { className: 'hint' }), ins = [];
+    const apply = () => { const h = hex(r, g, b); set(h); sw.style.background = prev.style.background = h; code.textContent = h.toUpperCase(); [r, g, b].forEach((v, i) => { ins[i][0].value = ins[i][1].value = v; }); };
+    const put = h => { [r, g, b] = rgbOf(h); apply(); };
+    const line = list => el('div', { className: 'cpsw' }, ...list.map(([name, h]) => { const s = el('button', { title: name, onclick: () => put(h) }); s.style.background = h; return s; }));
+    const chan = (name, i) => { const ra = el('input', { type: 'range', min: 0, max: 255, step: 1 }), nu = el('input', { type: 'number', min: 0, max: 255, step: 1 }); ins[i] = [ra, nu];
+      const on = src => () => { if (src.value === '') return; const v = clamp(Math.round(+src.value) || 0, 0, 255); if (i === 0) r = v; else if (i === 1) g = v; else b = v; apply(); if (src === nu) nu.value = src.value; };
+      ra.oninput = on(ra); nu.oninput = on(nu); return el('div', { className: 'row' }, el('label', { textContent: name }), ra, nu); };
+    const native = el('input', { type: 'color', hidden: true }); native.oninput = () => put(native.value);
+    const p = bgPalette();
+    box.append(line(BASIC), ...(p.length ? [line(p.map(h => ['배경 그림의 색', h]))] : [el('p', { className: 'hint', textContent: '배경 이미지를 넣으면 그림에서 뽑은 색이 여기에 나옵니다.' })]),
+      chan('R', 0), chan('G', 1), chan('B', 2),
+      el('div', { className: 'row' }, prev, code, el('button', { className: 'mini wide', textContent: '기기 색상표', onclick: () => { native.value = hex(r, g, b); native.click(); } }), el('button', { className: 'btn', textContent: '닫기', onclick: () => back.remove() }), native));
+    back.append(box); back.onclick = e => { if (e.target === back) back.remove(); }; document.body.append(back); apply();
+  };
+  return sw;
+}
+
 /* ---------- 구간 자르기와 화면전환 ---------- */
 const span = () => S.crop.on ? { a: S.crop.a, b: Math.max(S.crop.a + .5, Math.min(S.crop.b, S.dur || S.crop.b)) } : { a: 0, b: S.dur || 0 };
 const ease = p => p * p * (3 - 2 * p), cosw = p => .5 - .5 * Math.cos(Math.PI * p);
@@ -382,7 +421,7 @@ function buildPanel() {
   const row = (label, ...kids) => el('div', { className: 'row' }, el('label', { textContent: label }), ...kids);
   const num = (obj, key, min, max, stepv = 1, after) => { const i = el('input', { type: 'number', value: obj[key], min, max, step: stepv }); i.oninput = () => { if (i.value !== '') { obj[key] = clamp(+i.value, min, max); after?.(); } }; return i; };
   const range = (obj, key, min, max, stepv = 1) => { const i = el('input', { type: 'range', value: obj[key], min, max, step: stepv }); i.oninput = () => obj[key] = +i.value; return i; };
-  const color = (obj, key) => { const i = el('input', { type: 'color', value: obj[key] }); i.oninput = () => obj[key] = i.value; return i; };
+  const color = (obj, key) => colorBtn(() => obj[key], v => obj[key] = v);
   const check = (obj, key, label) => { const i = el('input', { type: 'checkbox', checked: obj[key] }); i.onchange = () => obj[key] = i.checked; return el('label', { className: 'chk' }, i, label); };
   const head = t => el('h4', { textContent: t });
 
@@ -401,7 +440,7 @@ function buildPanel() {
     label();
     const pos = (id, key) => { const i = el('input', { type: 'number', id, step: 1, value: Math.round(T[key]) }); i.oninput = () => { T[key] = +i.value || 0; rebuildBg(); }; return i; };
     const ar = (icon, dx, dy, title) => el('button', { className: 'mini', innerHTML: ICON[icon], title, onclick: () => nudgeBg(dx, dy) });
-    const fill = el('input', { type: 'color', value: S.bgFill }); fill.oninput = () => { S.bgFill = fill.value; rebuildBg(); };
+    const fill = colorBtn(() => S.bgFill, v => { S.bgFill = v; rebuildBg(); });
     P.append(row('크기', z, zp, el('span', { className: 'hint', textContent: '%' })),
       row('', ...fits.slice(0, 2).map(f => el('button', { className: 'mini wide', textContent: f[0], onclick: () => { T.zoom = f[1]; rebuildBg(); buildPanel(); } })), zn),
       el('p', { className: 'hint', textContent: '100%는 화면을 꽉 채우는 크기입니다. 막대를 움직이면 가로 맞춤, 세로 맞춤, 원본 크기 근처에서 달라붙습니다.' }),
@@ -415,7 +454,7 @@ function buildPanel() {
   if (S.sel === 'eq' && !S.eq) { P.append(el('p', { className: 'hint', textContent: '위에서 이퀄라이저 파일을 넣거나 프리셋을 고르세요.' })); return; }
 
   if (S.sel === 'lyr') P.append(head('표시'), row('줄 수',
-    ...[[1, '한 줄'], [2, '두 줄 (다음 줄 흐리게)']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })));
+    ...[[1, '한 줄'], [2, '두 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })));
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
