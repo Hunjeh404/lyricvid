@@ -212,7 +212,7 @@ function maskSprite(bmp, dw, dh, st) {   // 흰 모양(프리셋)에 색과 효�
   return { c: finish(B, st), pad, w: dw, h: dh };
 }
 const place = (L, w, h) => ({ x: L.ax === 0 ? L.mx : L.ax === 1 ? W - L.mx - w : (W - w) / 2, y: L.ay === 0 ? L.my : L.ay === 1 ? H - L.my - h : (H - h) / 2, w, h });
-const alignX = (L, box, w) => box.x + (box.w - w) * L.ax;
+const alignX = (L, box, w) => box.x + (box.w - w) * (L.ta ?? L.ax);      // 정렬을 따로 안 정했으면 위치를 따른다
 
 function eqFrame(t) { const { meta, frames } = S.eq; return frames[Math.min(frames.length - 1, Math.floor((t % meta.loopSeconds) / meta.loopSeconds * frames.length))]; }
 
@@ -287,7 +287,7 @@ function draw(g, t, edit) {
   const T = S.L.ttl;
   if (T.title || T.artist) {
     const a = T.title ? textSprite(T.title, T.font, T.size, T.st) : null, c = T.artist ? textSprite(T.artist, T.font, Math.round(T.size * .62), T.st) : null;
-    const gap = a && c ? T.size * .12 : 0, b = place(T, Math.max(a?.w || 0, c?.w || 0), (a?.h || 0) + gap + (c?.h || 0));
+    const gap = a && c ? T.size * (T.lh ?? .12) : 0, b = place(T, Math.max(a?.w || 0, c?.w || 0), (a?.h || 0) + gap + (c?.h || 0));
     if (a) g.drawImage(a.c, alignX(T, b, a.w) - a.pad, b.y - a.pad);
     if (c) g.drawImage(c.c, alignX(T, b, c.w) - c.pad, b.y + (a?.h || 0) + gap - c.pad);
     boxes.ttl = b;
@@ -299,7 +299,7 @@ function draw(g, t, edit) {
   if (i >= 0 && S.cues[i].text) {
     const s2 = Math.round(L.size * .72), a = textSprite(S.cues[i].text, L.font, L.size, L.st);
     const nx = L.mode === 2 && !gapAfter(i) && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
-    const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * .16 : 0;
+    const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * (L.lh ?? .16) : 0;
     const b = place(L, Math.max(a.w, nx?.w || 0), a.h + gap + h2);
     g.globalAlpha = alpha; g.drawImage(a.c, alignX(L, b, a.w) - a.pad, b.y - a.pad);
     if (nx) { g.globalAlpha = alpha * .45; g.drawImage(nx.c, alignX(L, b, nx.w) - nx.pad, b.y + a.h + gap - nx.pad); }
@@ -514,6 +514,11 @@ function buildPanel() {
   // 크기
   const sz = S.sel === 'eq' ? [range(L, 'size', .3, 3, .01)] : [range(L, 'size', 20, 240, 1)]; sz[0].id = 'sizeI';
   P.append(head('크기'), row(S.sel === 'eq' ? '배율' : '글자 크기', ...sz), el('p', { className: 'hint', textContent: '화면에서 모서리 네모를 끌어도 됩니다.' }));
+  if (S.sel !== 'eq') {      // 정렬과 줄 간격(가사는 두 줄일 때, 제목은 제목과 이름 사이)
+    const ta = L.ta ?? L.ax; L.lh ??= S.sel === 'lyr' ? .16 : .12;
+    P.append(head('정렬'), row('정렬', ...[[0, '왼쪽'], [.5, '가운데'], [1, '오른쪽']].map(([v, t]) => { const b = el('button', { className: 'seg' + (ta === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.ta = v; buildPanel(); }; return b; })));
+    if (S.sel === 'ttl' || L.mode === 2) P.append(row('줄 간격', range(L, 'lh', 0, 1.5, .01)));
+  }
 
   if (S.sel === 'eq' && S.eq.meta.kind === 'live') P.append(el('p', { className: 'hint', textContent: '이 프리셋은 음원의 소리 크기에 맞춰 저절로 움직입니다. 박자를 맞출 필요가 없습니다.' }));
   if (S.sel === 'eq' && S.eq.meta.kind !== 'live') { P.append(el('p', { className: 'hint', textContent: '곡 전용 이퀄라이저는 색과 효과가 이미 들어 있어 위치와 크기만 조절합니다.' })); return; }
