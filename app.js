@@ -291,8 +291,8 @@ function draw(g, t, edit) {
   if (T.title || T.artist) {
     const a = T.title ? textSprite(T.title, T.font, T.size, T.st) : null, c = T.artist ? textSprite(T.artist, T.font, Math.round(T.size * .62), T.st) : null;
     const gap = a && c ? T.size * (T.lh ?? .12) : 0, b = place(T, Math.max(a?.w || 0, c?.w || 0), (a?.h || 0) + gap + (c?.h || 0));
+    if (c) g.drawImage(c.c, alignX(T, b, c.w) - c.pad, b.y + (a?.h || 0) + gap - c.pad);      // 겹치면 제목이 위에 오도록 이름을 먼저 그린다
     if (a) g.drawImage(a.c, alignX(T, b, a.w) - a.pad, b.y - a.pad);
-    if (c) g.drawImage(c.c, alignX(T, b, c.w) - c.pad, b.y + (a?.h || 0) + gap - c.pad);
     boxes.ttl = b;
   }
 
@@ -304,8 +304,8 @@ function draw(g, t, edit) {
     const nx = L.mode === 2 && !gapAfter(i) && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
     const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * (L.lh ?? .16) : 0;
     const b = place(L, Math.max(a.w, nx?.w || 0), a.h + gap + h2);
+    if (nx) { g.globalAlpha = alpha * .45; g.drawImage(nx.c, alignX(L, b, nx.w) - nx.pad, b.y + a.h + gap - nx.pad); }      // 겹치면 지금 줄이 위에 오도록 다음 줄을 먼저 그린다
     g.globalAlpha = alpha; g.drawImage(a.c, alignX(L, b, a.w) - a.pad, b.y - a.pad);
-    if (nx) { g.globalAlpha = alpha * .45; g.drawImage(nx.c, alignX(L, b, nx.w) - nx.pad, b.y + a.h + gap - nx.pad); }
     g.globalAlpha = 1; boxes.lyr = b;
   }
   return boxes;
