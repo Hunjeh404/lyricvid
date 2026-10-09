@@ -77,7 +77,8 @@ $('#applyLyrics').onclick = () => {
 };
 function stamp() {
   if (S.redo != null) { const c = S.cues[S.redo], t = audio.currentTime; c.start = t; if (c.end != null && c.end <= t) c.end = null; return go(2); }      // 한 줄만 다시 찍는 중: 찍으면 2번 화면으로 돌아간다
-  if (S.rec >= S.cues.length || !S.audioFile) return;
+  if (!S.audioFile || !S.cues.length) return;
+  if (S.rec >= S.cues.length) { const c = S.cues[S.rec - 1]; if (audio.currentTime > c.start) { c.end = audio.currentTime; drawRec(); } return; }      // 모든 줄을 찍은 뒤: 마지막 줄이 사라지는 순간
   const c = S.cues[S.rec]; c.start = audio.currentTime; c.end = null; S.rec++; drawRec();
 }
 function blank() {
@@ -86,7 +87,9 @@ function blank() {
 }
 function undo() {
   if (S.redo != null) return go(2);
-  if (!S.rec) return; S.rec--;
+  if (!S.rec) return;
+  if (S.rec >= S.cues.length && S.cues[S.rec - 1].end != null) { S.cues[S.rec - 1].end = null; return drawRec(); }      // 마지막 줄 끝부터 되돌린다
+  S.rec--;
   const c = S.cues[S.rec]; c.start = c.end = null;
   if (S.rec) S.cues[S.rec - 1].end = null;
   audio.currentTime = S.rec ? S.cues[S.rec - 1].start : 0; drawRec();
@@ -94,7 +97,7 @@ function undo() {
 function drawRec(blanked) {
   const c = S.cues, r = S.redo ?? S.rec;
   $('#recPrev').textContent = c[r - 1] ? c[r - 1].text : '';
-  $('#recNow').textContent = c[r] ? c[r].text : (c.length ? '모든 줄을 찍었습니다. 2번 화면에서 다듬으세요.' : '왼쪽에 음원과 가사를 넣고 가사 적용을 누르세요.');
+  $('#recNow').textContent = c[r] ? c[r].text : (c.length ? (c[r - 1].end == null ? '마지막 줄이 사라질 때 찍기를 누르세요.' : '모든 줄을 찍었습니다. 2번 화면에서 다듬으세요.') : '왼쪽에 음원과 가사를 넣고 가사 적용을 누르세요.');
   $('#recNext').textContent = c[r + 1] ? c[r + 1].text : '';
   $('#recCount').textContent = c.length ? (S.redo != null ? `${r + 1}번째 줄만 다시 찍는 중 · 다른 줄 시점은 그대로` : `${r} / ${c.length}줄`) + (blanked ? ' · 방금 줄을 여기서 지움' : '') : '';
 }
