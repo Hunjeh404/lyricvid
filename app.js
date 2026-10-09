@@ -467,7 +467,7 @@ function buildPanel() {
   const P = $('#panel'), L = S.L[S.sel]; P.replaceChildren();
   const row = (label, ...kids) => el('div', { className: 'row' }, el('label', { textContent: label }), ...kids);
   const num = (obj, key, min, max, stepv = 1, after) => { const i = el('input', { type: 'number', value: obj[key], min, max, step: stepv }); i.oninput = () => { if (i.value !== '') { obj[key] = clamp(+i.value, min, max); after?.(); } }; return i; };
-  const range = (obj, key, min, max, stepv = 1) => { const i = el('input', { type: 'range', value: obj[key], min, max, step: stepv }); i.oninput = () => obj[key] = +i.value; return i; };
+  const range = (obj, key, min, max, stepv = 1) => { const i = el('input', { type: 'range', min, max, step: stepv }); i.value = obj[key]; i.oninput = () => obj[key] = +i.value; return i; };
   const color = (obj, key) => colorBtn(() => obj[key], v => obj[key] = v);
   const check = (obj, key, label) => { const i = el('input', { type: 'checkbox', checked: obj[key] }); i.onchange = () => obj[key] = i.checked; return el('label', { className: 'chk' }, i, label); };
   const head = t => el('h4', { textContent: t });
@@ -518,9 +518,9 @@ function buildPanel() {
   const sz = S.sel === 'eq' ? [range(L, 'size', .3, 3, .01)] : [range(L, 'size', 20, 240, 1)]; sz[0].id = 'sizeI';
   P.append(head('크기'), row(S.sel === 'eq' ? '배율' : '글자 크기', ...sz), el('p', { className: 'hint', textContent: '화면에서 모서리 네모를 끌어도 됩니다.' }));
   if (S.sel !== 'eq') {      // 정렬과 줄 간격(가사는 두 줄일 때, 제목은 제목과 이름 사이)
-    const ta = L.ta ?? L.ax; L.lh ??= S.sel === 'lyr' ? .16 : .12;
+    const ta = L.ta ?? L.ax, d = S.sel === 'lyr' ? .16 : .12; L.lh ??= d;      // 줄 간격은 기본값이 조절바 가운데: 줄이거나 늘린다
     P.append(head('정렬'), row('정렬', ...[[0, '왼쪽'], [.5, '가운데'], [1, '오른쪽']].map(([v, t]) => { const b = el('button', { className: 'seg' + (ta === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.ta = v; buildPanel(); }; return b; })));
-    if (S.sel === 'ttl' || L.mode === 2) P.append(row('줄 간격', range(L, 'lh', 0, 1.5, .01)));
+    if (S.sel === 'ttl' || L.mode === 2) P.append(row('줄 간격', range(L, 'lh', d - .6, d + .6, .01)));
   }
 
   if (S.sel === 'eq' && S.eq.meta.kind === 'live') P.append(el('p', { className: 'hint', textContent: '이 프리셋은 음원의 소리 크기에 맞춰 저절로 움직입니다. 박자를 맞출 필요가 없습니다.' }));
