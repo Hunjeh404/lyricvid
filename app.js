@@ -297,6 +297,7 @@ function draw(g, t, edit) {
   }
 
   const L = S.L.lyr; let i = activeCue(t), alpha = 1;
+  if (L.mode === 3) { const b = drawThree(g, t, i, edit); if (b) boxes.lyr = b; return boxes; }
   if (i >= 0) alpha = clamp((t - S.cues[i].start) / .15, 0, 1) * clamp((endOf(i) - t) / .15, 0, 1);
   else if (edit) i = S.cues.findIndex(c => c.text);
   if (i >= 0 && S.cues[i].text) {
@@ -309,6 +310,30 @@ function draw(g, t, edit) {
     g.globalAlpha = 1; boxes.lyr = b;
   }
   return boxes;
+}
+
+// 세 줄 표시: 가운데 지금 줄, 위 이전 줄, 아래 다음 줄. 이어지는 줄로 바뀔 때는 한 줄씩 위로 스크롤한다
+const linked = i => i >= 0 && !!S.cues[i]?.text && S.cues[i].start != null && !!S.cues[i + 1]?.text && S.cues[i + 1].start != null && !gapAfter(i);      // i 줄과 다음 줄이 빈 시간 없이 이어지는가
+function drawThree(g, t, i, edit) {
+  const L = S.L.lyr; let alpha = 1, p = 0;
+  if (i >= 0) {
+    const c = S.cues[i], s1 = S.cues[i + 1]?.start;
+    if (!linked(i - 1)) alpha *= clamp((t - c.start) / .15, 0, 1);      // 이어지는 앞줄이 없으면 나타나기만
+    if (linked(i)) { const D = Math.min(.3, (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 가운데 도착
+    else alpha *= clamp((endOf(i) - t) / .15, 0, 1);
+  } else if (edit) i = S.cues.findIndex(c => c.text);
+  if (i < 0 || !S.cues[i].text) return null;
+  const k = .72, hM = textSprite('가', L.font, L.size, L.st).h, hS = hM * k, gap = L.size * (L.lh ?? .16);
+  const top = [-gap - hS, 0, hS + gap, hS + gap + hM + gap, 2 * hS + 3 * gap + hM];      // 자리 -1(위로 사라짐), 0 이전, 1 지금, 2 다음, 3(아래에서 나타남)의 윗선
+  const scl = [k, k, 1, k, k], alp = [0, .45, 1, .45, 0];
+  const show = [linked(i - 1), true, linked(i), linked(i) && linked(i + 1)];      // i-1, i, i+1, i+2 를 보일지
+  const items = [-1, 0, 1, 2].map((d, n) => ({ n: i + d, slot: d + 1 - p, ok: show[n] })).filter(o => o.ok && S.cues[o.n]?.text);
+  const lerp = (arr, s) => { const x = s + 1, a = Math.floor(x), f = x - a; return arr[clamp(a, 0, 4)] * (1 - f) + arr[clamp(a + 1, 0, 4)] * f; };
+  const spr = items.map(o => ({ ...o, a: textSprite(S.cues[o.n].text, L.font, L.size, L.st), s: lerp(scl, o.slot) }));
+  const b = place(L, Math.max(...spr.map(o => o.a.w * o.s)), 2 * hS + 2 * gap + hM);
+  spr.sort((x, y) => Math.abs(y.slot - 1) - Math.abs(x.slot - 1));      // 가운데에 가까운 줄을 나중에(위에) 그린다
+  for (const o of spr) { const s = o.s; g.globalAlpha = alpha * lerp(alp, o.slot); g.drawImage(o.a.c, alignX(L, b, o.a.w * s) - o.a.pad * s, b.y + lerp(top, o.slot) - o.a.pad * s, o.a.c.width * s, o.a.c.height * s); }
+  g.globalAlpha = 1; return b;
 }
 
 /* ---------- 색 고르기 창: 기본 색, 배경 그림에서 뽑은 색, RGB 숫자 ---------- */
@@ -501,7 +526,7 @@ function buildPanel() {
   if (S.sel === 'eq' && !S.eq) { P.append(el('p', { className: 'hint', textContent: '위에서 이퀄라이저 파일을 넣거나 프리셋을 고르세요.' })); return; }
 
   if (S.sel === 'lyr') P.append(head('표시'), row('줄 수',
-    ...[[1, '한 줄'], [2, '두 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })));
+    ...[[1, '한 줄'], [2, '두 줄'], [3, '세 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })));
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
@@ -520,7 +545,7 @@ function buildPanel() {
   if (S.sel !== 'eq') {      // 정렬과 줄 간격(가사는 두 줄일 때, 제목은 제목과 이름 사이)
     const ta = L.ta ?? L.ax, d = S.sel === 'lyr' ? .16 : .12; L.lh ??= d;      // 줄 간격은 기본값이 조절바 가운데: 줄이거나 늘린다
     P.append(head('정렬'), row('정렬', ...[[0, '왼쪽'], [.5, '가운데'], [1, '오른쪽']].map(([v, t]) => { const b = el('button', { className: 'seg' + (ta === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.ta = v; buildPanel(); }; return b; })));
-    if (S.sel === 'ttl' || L.mode === 2) P.append(row('줄 간격', range(L, 'lh', d - .6, d + .6, .01)));
+    if (S.sel === 'ttl' || L.mode > 1) P.append(row('줄 간격', range(L, 'lh', d - .6, d + .6, .01)));
   }
 
   if (S.sel === 'eq' && S.eq.meta.kind === 'live') P.append(el('p', { className: 'hint', textContent: '이 프리셋은 음원의 소리 크기에 맞춰 저절로 움직입니다. 박자를 맞출 필요가 없습니다.' }));
