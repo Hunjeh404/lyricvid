@@ -303,6 +303,12 @@ function draw(g, t, edit) {
 // 가사 그리기: 한 줄(지금), 두 줄(지금+다음), 세 줄(이전+지금+다음). 이어지는 줄로 바뀔 때의 전환은 L.anim
 const linked = i => i >= 0 && !!S.cues[i]?.text && S.cues[i].start != null && !!S.cues[i + 1]?.text && S.cues[i + 1].start != null && !gapAfter(i);      // i 줄과 다음 줄이 빈 시간 없이 이어지는가
 const animOf = L => { const a = L.anim ?? (L.mode === 3 ? 'scroll' : 'fade'); return a === 'scroll' && L.mode === 1 ? 'fade' : a; };
+let lyrWk = '', lyrWv = 0;
+function lyrW(L) {      // 가사 상자 폭은 곡 전체 가사 중 가장 긴 줄에 맞춰 고정한다(정렬·전환 중에 상자가 흔들리지 않게)
+  const key = [L.font, L.size, JSON.stringify(L.st), ...S.cues.map(c => c.text)].join('\u0001');
+  if (key !== lyrWk) { lyrWk = key; lyrWv = Math.max(1, ...S.cues.filter(c => c.text).map(c => textSprite(c.text, L.font, L.size, L.st).w)); }
+  return lyrWv;
+}
 function drawLyrics(g, t, i, edit) {
   const L = S.L.lyr, an = animOf(L), m = L.mode || 1; let alpha = 1, p = 0;
   if (i >= 0) {
@@ -331,7 +337,7 @@ function drawLyrics(g, t, i, edit) {
   if (an === 'scroll') parts = [{ L: state(i, p), dy: 0, al: 1 }];
   else if ((an === 'cross' || an === 'float') && p > 0) { const f = an === 'float' ? hM * .3 : 0; parts = [{ L: state(i, 0), dy: -f * p, al: 1 - p }, { L: state(i + 1, 0), dy: f * (1 - p), al: p }]; }
   else parts = [{ L: state(i, 0), dy: 0, al: 1 }];
-  const b = place(L, Math.max(...parts[0].L.map(o => o.a.w * o.r)), lay.hgt);
+  const b = place(L, lyrW(L), lay.hgt);
   for (const P of parts) {
     P.L.sort((u, v) => Math.abs(v.x - lay.c0) - Math.abs(u.x - lay.c0));      // 지금 줄 자리에 가까운 줄을 나중에(위에) 그린다
     for (const o of P.L) { const r = o.r; g.globalAlpha = alpha * P.al * o.al; g.drawImage(o.a.c, alignX(L, b, o.a.w * r) - o.a.pad * r, b.y + o.y + P.dy - o.a.pad * r, o.a.c.width * r, o.a.c.height * r); }
