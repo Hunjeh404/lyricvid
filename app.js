@@ -296,43 +296,46 @@ function draw(g, t, edit) {
     boxes.ttl = b;
   }
 
-  const L = S.L.lyr; let i = activeCue(t), alpha = 1;
-  if (L.mode === 3) { const b = drawThree(g, t, i, edit); if (b) boxes.lyr = b; return boxes; }
-  if (i >= 0) alpha = clamp((t - S.cues[i].start) / .15, 0, 1) * clamp((endOf(i) - t) / .15, 0, 1);
-  else if (edit) i = S.cues.findIndex(c => c.text);
-  if (i >= 0 && S.cues[i].text) {
-    const s2 = Math.round(L.size * .72), a = textSprite(S.cues[i].text, L.font, L.size, L.st);
-    const nx = L.mode === 2 && !gapAfter(i) && S.cues[i + 1]?.text ? textSprite(S.cues[i + 1].text, L.font, s2, L.st) : null;
-    const h2 = L.mode === 2 ? textSprite('가', L.font, s2, L.st).h : 0, gap = L.mode === 2 ? L.size * (L.lh ?? .16) : 0;
-    const b = place(L, Math.max(a.w, nx?.w || 0), a.h + gap + h2);
-    if (nx) { g.globalAlpha = alpha * .45; g.drawImage(nx.c, alignX(L, b, nx.w) - nx.pad, b.y + a.h + gap - nx.pad); }      // 겹치면 지금 줄이 위에 오도록 다음 줄을 먼저 그린다
-    g.globalAlpha = alpha; g.drawImage(a.c, alignX(L, b, a.w) - a.pad, b.y - a.pad);
-    g.globalAlpha = 1; boxes.lyr = b;
-  }
+  const lb = drawLyrics(g, t, activeCue(t), edit); if (lb) boxes.lyr = lb;
   return boxes;
 }
 
-// 세 줄 표시: 가운데 지금 줄, 위 이전 줄, 아래 다음 줄. 이어지는 줄로 바뀔 때는 한 줄씩 위로 스크롤한다
+// 가사 그리기: 한 줄(지금), 두 줄(지금+다음), 세 줄(이전+지금+다음). 이어지는 줄로 바뀔 때의 전환은 L.anim
 const linked = i => i >= 0 && !!S.cues[i]?.text && S.cues[i].start != null && !!S.cues[i + 1]?.text && S.cues[i + 1].start != null && !gapAfter(i);      // i 줄과 다음 줄이 빈 시간 없이 이어지는가
-function drawThree(g, t, i, edit) {
-  const L = S.L.lyr; let alpha = 1, p = 0;
+const animOf = L => { const a = L.anim ?? (L.mode === 3 ? 'scroll' : 'fade'); return a === 'scroll' && L.mode === 1 ? 'fade' : a; };
+function drawLyrics(g, t, i, edit) {
+  const L = S.L.lyr, an = animOf(L), m = L.mode || 1; let alpha = 1, p = 0;
   if (i >= 0) {
-    const c = S.cues[i], s1 = S.cues[i + 1]?.start;
-    if (!linked(i - 1)) alpha *= clamp((t - c.start) / .15, 0, 1);      // 이어지는 앞줄이 없으면 나타나기만
-    if (linked(i)) { const D = Math.min(.3, (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 가운데 도착
-    else alpha *= clamp((endOf(i) - t) / .15, 0, 1);
+    const c = S.cues[i], fin = clamp((t - c.start) / .15, 0, 1), fout = clamp((endOf(i) - t) / .15, 0, 1);
+    if (an === 'fade') alpha = fin * fout;                       // 줄이 바뀔 때마다 잠깐 사라졌다 나타남
+    else if (an !== 'none') {                                    // 이어지는 줄이 없을 때만 나타나기·사라지기
+      if (!linked(i - 1)) alpha *= fin;
+      if (linked(i)) { const s1 = S.cues[i + 1].start, D = Math.min(.3, (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 전환이 끝난다
+      else alpha *= fout;
+    }
   } else if (edit) i = S.cues.findIndex(c => c.text);
   if (i < 0 || !S.cues[i].text) return null;
   const k = .72, hM = textSprite('가', L.font, L.size, L.st).h, hS = hM * k, gap = L.size * (L.lh ?? .16);
-  const top = [-gap - hS, 0, hS + gap, hS + gap + hM + gap, 2 * hS + 3 * gap + hM];      // 자리 -1(위로 사라짐), 0 이전, 1 지금, 2 다음, 3(아래에서 나타남)의 윗선
-  const scl = [k, k, 1, k, k], alp = [0, .45, 1, .45, 0];
-  const show = [linked(i - 1), true, linked(i), linked(i) && linked(i + 1)];      // i-1, i, i+1, i+2 를 보일지
-  const items = [-1, 0, 1, 2].map((d, n) => ({ n: i + d, slot: d + 1 - p, ok: show[n] })).filter(o => o.ok && S.cues[o.n]?.text);
-  const lerp = (arr, s) => { const x = s + 1, a = Math.floor(x), f = x - a; return arr[clamp(a, 0, 4)] * (1 - f) + arr[clamp(a + 1, 0, 4)] * f; };
-  const spr = items.map(o => ({ ...o, a: textSprite(S.cues[o.n].text, L.font, L.size, L.st), s: lerp(scl, o.slot) }));
-  const b = place(L, Math.max(...spr.map(o => o.a.w * o.s)), 2 * hS + 2 * gap + hM);
-  spr.sort((x, y) => Math.abs(y.slot - 1) - Math.abs(x.slot - 1));      // 가운데에 가까운 줄을 나중에(위에) 그린다
-  for (const o of spr) { const s = o.s; g.globalAlpha = alpha * lerp(alp, o.slot); g.drawImage(o.a.c, alignX(L, b, o.a.w * s) - o.a.pad * s, b.y + lerp(top, o.slot) - o.a.pad * s, o.a.c.width * s, o.a.c.height * s); }
+  // 자리마다 윗선·배율·투명도. c0 이 지금 줄 자리, 양 끝은 위로 사라지거나 아래에서 나타나는 자리
+  const lay = m === 3 ? { top: [-gap - hS, 0, hS + gap, hS + gap + hM + gap, 2 * hS + 3 * gap + hM], scl: [k, k, 1, k, k], alp: [0, .45, 1, .45, 0], c0: 2, hgt: 2 * hS + 2 * gap + hM, ds: [-1, 0, 1, 2] }
+    : m === 2 ? { top: [-gap - hM, 0, hM + gap, hM + 2 * gap + hS], scl: [1, 1, k, k], alp: [0, 1, .45, 0], c0: 1, hgt: hM + gap + hS, ds: [0, 1, 2] }
+    : { top: [-gap - hM, 0, hM + gap], scl: [1, 1, 1], alp: [0, 1, 0], c0: 1, hgt: hM, ds: [0, 1] };
+  const lerp = (arr, x) => { const a = Math.floor(x), f = x - a, n = arr.length - 1; return arr[clamp(a, 0, n)] * (1 - f) + arr[clamp(a + 1, 0, n)] * f; };
+  const state = (ci, shift) => {      // ci 줄을 지금 줄로 둔 모습. shift 만큼 위로 밀린 상태
+    const show = d => d === 0 || (d === -1 ? linked(ci - 1) : d === 1 ? linked(ci) : linked(ci) && linked(ci + 1));
+    return lay.ds.filter(d => show(d) && S.cues[ci + d]?.text).map(d => { const x = lay.c0 + d - shift, s = lerp(lay.scl, x);
+      const a = s === k ? textSprite(S.cues[ci + d].text, L.font, Math.round(L.size * k), L.st) : textSprite(S.cues[ci + d].text, L.font, L.size, L.st), r = s === k ? 1 : s;      // 작은 줄은 작은 글자로 따로 그려 테두리 굵기를 지금과 같게
+      return { a, r, x, y: lerp(lay.top, x), al: lerp(lay.alp, x) }; });
+  };
+  let parts;
+  if (an === 'scroll') parts = [{ L: state(i, p), dy: 0, al: 1 }];
+  else if ((an === 'cross' || an === 'float') && p > 0) { const f = an === 'float' ? hM * .3 : 0; parts = [{ L: state(i, 0), dy: -f * p, al: 1 - p }, { L: state(i + 1, 0), dy: f * (1 - p), al: p }]; }
+  else parts = [{ L: state(i, 0), dy: 0, al: 1 }];
+  const b = place(L, Math.max(...parts[0].L.map(o => o.a.w * o.r)), lay.hgt);
+  for (const P of parts) {
+    P.L.sort((u, v) => Math.abs(v.x - lay.c0) - Math.abs(u.x - lay.c0));      // 지금 줄 자리에 가까운 줄을 나중에(위에) 그린다
+    for (const o of P.L) { const r = o.r; g.globalAlpha = alpha * P.al * o.al; g.drawImage(o.a.c, alignX(L, b, o.a.w * r) - o.a.pad * r, b.y + o.y + P.dy - o.a.pad * r, o.a.c.width * r, o.a.c.height * r); }
+  }
   g.globalAlpha = 1; return b;
 }
 
@@ -526,7 +529,8 @@ function buildPanel() {
   if (S.sel === 'eq' && !S.eq) { P.append(el('p', { className: 'hint', textContent: '위에서 이퀄라이저 파일을 넣거나 프리셋을 고르세요.' })); return; }
 
   if (S.sel === 'lyr') P.append(head('표시'), row('줄 수',
-    ...[[1, '한 줄'], [2, '두 줄'], [3, '세 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })));
+    ...[[1, '한 줄'], [2, '두 줄'], [3, '세 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })),
+    row('전환', ...[['none', '없음'], ['fade', '사라지기'], ['cross', '교차'], ['float', '떠오르기'], ['scroll', '스크롤']].filter(([v]) => v !== 'scroll' || L.mode > 1).map(([v, t]) => { const b = el('button', { className: 'seg' + (animOf(L) === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.anim = v; buildPanel(); }; return b; })));
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
