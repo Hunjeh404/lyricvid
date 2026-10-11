@@ -56,7 +56,7 @@ $$('.step').forEach(b => b.onclick = () => go(+b.dataset.step));
 
 /* ---------- 재생 막대 ---------- */
 const seek = $('#seek');
-$('#play').onclick = () => audio.paused ? audio.play() : audio.pause();
+$('#play').onclick = () => { if (audio.paused && step === 4 && S.crop.on) { const { a, b } = span(); if (audio.currentTime < a || audio.currentTime >= b - .05) audio.currentTime = a; } audio.paused ? audio.play() : audio.pause(); };      // 구간 끝에서 다시 누르면 구간 처음부터
 audio.onplay = audio.onpause = () => { $('#play').classList.toggle('playing', !audio.paused); $('#live').hidden = audio.paused; };      // 지금 줄 크게 보기는 재생 중에만
 audio.onloadedmetadata = () => { S.dur = audio.duration; seek.max = S.dur; };
 seek.oninput = () => audio.currentTime = +seek.value;
@@ -530,7 +530,7 @@ function buildPanel() {
 
   if (S.sel === 'lyr') P.append(head('표시'), row('줄 수',
     ...[[1, '한 줄'], [2, '두 줄'], [3, '세 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })),
-    row('전환', ...[['none', '없음'], ['fade', '사라지기'], ['cross', '교차'], ['float', '떠오르기'], ['scroll', '스크롤']].filter(([v]) => v !== 'scroll' || L.mode > 1).map(([v, t]) => { const b = el('button', { className: 'seg' + (animOf(L) === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.anim = v; buildPanel(); }; return b; })));
+    row('전환', el('div', { className: 'segs' }, ...[['none', '없음'], ['fade', '사라지기'], ['cross', '교차'], ['float', '떠오르기'], ['scroll', '스크롤']].filter(([v]) => v !== 'scroll' || L.mode > 1).map(([v, t]) => { const b = el('button', { className: 'seg' + (animOf(L) === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.anim = v; buildPanel(); }; return b; }))));
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
@@ -608,7 +608,10 @@ stage.onpointerup = stage.onpointercancel = () => { if (dragging) { dragging = n
 
 /* ---------- 화면 갱신 ---------- */
 function tick() {
-  const t = audio.currentTime || 0;
+  let t = audio.currentTime || 0;
+  const cut = step === 4 && S.crop.on && S.dur ? span() : null, lo = cut ? cut.a : 0, hi = cut ? cut.b : S.dur || 0;      // 만들기 화면에서 구간을 자르면 재생 막대도 그 구간만
+  if (+seek.min !== lo || +seek.max !== hi) { seek.min = lo; seek.max = hi; }
+  if (cut && (t < lo || t > hi)) { audio.currentTime = t = clamp(t, lo, hi); }
   if (document.activeElement !== seek) seek.value = t;
   $('#time').textContent = `${fmt(t)} / ${fmt(S.dur)}`;
   if (step === 2) { const i = activeCue(t); $('#live').textContent = i >= 0 ? S.cues[i].text : ''; $$('#rows tr.on').forEach(r => r.classList.remove('on')); if (i >= 0) $('#row' + i)?.classList.add('on'); }
