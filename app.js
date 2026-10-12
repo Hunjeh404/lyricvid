@@ -56,14 +56,17 @@ $$('.step').forEach(b => b.onclick = () => go(+b.dataset.step));
 
 /* ---------- 재생 막대 ---------- */
 const seek = $('#seek');
-$('#play').onclick = () => { if (audio.paused && step === 4 && S.crop.on) { const { a, b } = span(); if (audio.currentTime < a || audio.currentTime >= b - .05) audio.currentTime = a; } audio.paused ? audio.play() : audio.pause(); };      // 구간 끝에서 다시 누르면 구간 처음부터
+$('#play').onclick = () => { if (!S.audioFile) return;      // 음원이 없으면 아무것도 하지 않는다(빈 재생기에 시각만 남는 것을 막는다)
+  if (audio.paused && step === 4 && S.crop.on) { const { a, b } = span(); if (audio.currentTime < a || audio.currentTime >= b - .05) audio.currentTime = a; } audio.paused ? audio.play() : audio.pause(); };      // 구간 끝에서 다시 누르면 구간 처음부터
 audio.onplay = audio.onpause = () => { $('#play').classList.toggle('playing', !audio.paused); $('#live').hidden = audio.paused; };      // 지금 줄 크게 보기는 재생 중에만
 audio.onloadedmetadata = () => { S.dur = audio.duration; seek.max = S.dur; };
+audio.onerror = () => { if (S.audioFile) alert('음원을 읽지 못했습니다. 다른 파일이나 브라우저(크롬)로 다시 시도해 주세요.'); };
 seek.oninput = () => audio.currentTime = +seek.value;
 
 $('#fAudio').onchange = e => {
-  const f = e.target.files[0]; if (!f) return;
-  S.audioFile = f; audio.src = URL.createObjectURL(f);
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;      // 같은 파일을 다시 골라도 다시 읽도록 비운다
+  audio.pause(); if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);      // 이전 재생기 상태(시각, 대기 중인 재생)를 지우고 새로 읽는다
+  S.audioFile = f; S.dur = 0; audio.src = URL.createObjectURL(f); audio.currentTime = 0; audio.load();
   $('#audioName').textContent = `${f.name} (${(f.size / 1048576).toFixed(1)}MB)`;
   S.lv = null; if (S.eq?.meta.kind === 'live') ensureLevels();
 };
