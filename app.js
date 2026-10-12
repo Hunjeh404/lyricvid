@@ -2,7 +2,7 @@
 import * as MB from './lib/mediabunny.min.mjs';
 
 let W = 2560, H = 1440;            // 화면 비율에 따라 바뀐다(짧은 변 1440)
-const FPS = 30, BITRATE = 6e6;     // BITRATE 는 2560x1440 기준, 화면 넓이에 비례해 조정한다
+const FPS = 30, BITRATE = 6e6, BITRATE_VID = 16e6;     // BITRATE 는 2560x1440 기준, 화면 넓이에 비례해 조정한다
 const RATIOS = [['3:2', 2160, 1440], ['16:9', 2560, 1440], ['2:1', 2880, 1440], ['1:1', 1440, 1440], ['2:3', 1440, 2160], ['9:16', 1440, 2560], ['1:2', 1440, 2880]];
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
@@ -279,6 +279,7 @@ function liveShape(m, t, dw, dh) {      // 프리셋 모양을 그 순간의 소
 function draw(g, t, edit) {
   const boxes = {};
   if (S.bg) g.drawImage(S.bg, 0, 0); else { g.fillStyle = '#1a1816'; g.fillRect(0, 0, W, H); }
+  if (S.bgVid && S.vidImg) drawVidBg(g, S.vidImg);
 
   if (S.eq) {
     const L = S.L.eq, m = S.eq.meta, k = (H / 1080) / (m.scale || 1) * L.size;
@@ -454,10 +455,67 @@ function setRatio(name) {
   for (const c of [cv, pv]) { c.width = W; c.height = H; } scratch = [mk(W, H), mk(W, H)]; rebuildBg(); fitStage();
 }
 $('#fBg').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
+  const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return;
+  if (fs.some(f => f.type.startsWith('video/'))) return loadBgVideos(fs);
+  stopVids(); S.bgVid = null;
+  const f = fs[0];
   S.bgImg = S.bgSrc = await createImageBitmap(f); S.bgUp = 1; S.bgFile = f.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg(); try { localStorage.removeItem(UP_FAIL); } catch {}
   $('#bgName').textContent = `${f.name} (${S.bgImg.width}x${S.bgImg.height})`; if (S.sel === 'bg') buildPanel();
 };
+
+/* ---------- 배경 영상: 10초 이하 루프 영상 1~2개를 이어 붙여 반복. 노래 0초 = 영상 0초 ---------- */
+const VID_MAX = 10;
+async function loadBgVideos(fs) {
+  if (fs.length > 2 || fs.some(f => !f.type.startsWith('video/'))) return alert('배경 영상은 한 번에 1~2개만, 그림과 섞지 않고 넣어 주세요.');
+  const clips = [];
+  for (const file of fs) {
+    const v = Object.assign(document.createElement('video'), { muted: true, playsInline: true, preload: 'auto', src: URL.createObjectURL(file) });
+    try { await new Promise((ok, no) => { v.onloadeddata = ok; v.onerror = () => no(); }); } catch { return alert(`${file.name}: 이 브라우저에서 읽을 수 없는 영상입니다.`); }
+    if (!(v.duration <= VID_MAX + .05)) return alert(`${file.name}: ${v.duration.toFixed(1)}초입니다. 배경 영상은 ${VID_MAX}초 이하 루프 영상만 넣을 수 있습니다.`);
+    clips.push({ file, el: v, dur: v.duration, w: v.videoWidth, h: v.videoHeight });
+  }
+  const v0 = clips[0].el; if (v0.currentTime > 0) { v0.currentTime = 0; await new Promise(r => v0.onseeked = r); }
+  stopVids(); S.bgVid = { clips, total: clips.reduce((s, c) => s + c.dur, 0) }; S.vidImg = null;
+  S.bgImg = S.bgSrc = await createImageBitmap(v0); S.bgUp = 1; S.bgFile = clips[0].file.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg();      // 첫 영상의 첫 장면: 위치 맞추기와 흐린 채우기에 쓴다
+  $('#bgName').textContent = clips.map(c => `${c.file.name} (${c.w}x${c.h}, ${c.dur.toFixed(1)}초)`).join(' + '); if (S.sel === 'bg') buildPanel();
+}
+function stopVids() { S.bgVid?.clips.forEach(c => { c.el.pause(); URL.revokeObjectURL(c.el.src); }); }
+const clipAt = t => { const V = S.bgVid; let x = ((t % V.total) + V.total) % V.total; return x < V.clips[0].dur || V.clips.length < 2 ? [0, Math.min(x, V.clips[0].dur)] : [1, x - V.clips[0].dur]; };
+function drawVidBg(g, img) {      // 그림 배경과 같은 자리·크기에 그린다. 두 번째 영상의 비율이 다르면 그 자리에 맞춰 가장자리를 잘라 채운다
+  const T = S.bgT, b0 = S.bgImg, k = Math.max(W / b0.width, H / b0.height) * T.zoom, dw = b0.width * k, dh = b0.height * k, x = (W - dw) / 2 + T.dx, y = (H - dh) / 2 + T.dy;
+  const sw = img.videoWidth || img.width, sh = img.videoHeight || img.height; if (!sw || !sh) return;
+  let cw = sw, ch = sh; if (sw / sh > dw / dh) cw = sh * dw / dh; else ch = sw * dh / dw;
+  g.imageSmoothingQuality = 'high'; g.drawImage(img, (sw - cw) / 2, (sh - ch) / 2, cw, ch, x, y, dw, dh);
+}
+function syncVid(t, playing) {      // 미리보기: 노래 시각에 맞는 영상을 맞는 자리에서 재생
+  const [k, loc] = clipAt(t), V = S.bgVid;
+  V.clips.forEach((c, j) => { if (j !== k && !c.el.paused) c.el.pause(); });
+  const v = V.clips[k].el;
+  if (playing) { if (v.paused || v.ended) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; }
+  else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; }
+  return v.readyState >= 2 ? v : null;
+}
+async function vidReader(clips) {      // 영상 만들기: 장면을 순서대로 풀어서 정확한 시각의 장면을 꺼낸다
+  const tr = await Promise.all(clips.map(async c => {
+    const inp = new MB.Input({ source: new MB.BlobSource(c.file), formats: MB.ALL_FORMATS }), v = await inp.getPrimaryVideoTrack();
+    if (!v || !(await v.canDecode())) throw new Error(`배경 영상(${c.file.name})을 이 브라우저에서 풀 수 없습니다`);
+    return { inp, sink: new MB.CanvasSink(v, { poolSize: 4 }), t0: await v.getFirstTimestamp() };
+  }));
+  let run = null;
+  return {
+    async at(t) {
+      const [k, loc] = clipAt(t), T = tr[k], x = T.t0 + loc;
+      if (!run || run.k !== k || loc < run.loc) {
+        await run?.it.return?.(); const it = T.sink.canvases(x)[Symbol.asyncIterator]();
+        run = { k, it, cur: (await it.next()).value }; run.nx = (await it.next()).value;
+      }
+      run.loc = loc;
+      while (run.nx && run.nx.timestamp <= x + 1e-4) { run.cur = run.nx; run.nx = (await run.it.next()).value; }
+      return run.cur?.canvas || null;
+    },
+    async close() { try { await run?.it.return?.(); } catch {} tr.forEach(o => o.inp.dispose?.()); },
+  };
+}
 
 async function unzip(buf) {
   const dv = new DataView(buf), u8 = new Uint8Array(buf), out = new Map(); let p = buf.byteLength - 22;
@@ -621,6 +679,7 @@ function tick() {
   if (document.activeElement !== seek) seek.value = t;
   $('#time').textContent = `${fmt(t)} / ${fmt(S.dur)}`;
   if (step === 2) { const i = activeCue(t); $('#live').textContent = i >= 0 ? S.cues[i].text : ''; $$('#rows tr.on').forEach(r => r.classList.remove('on')); if (i >= 0) $('#row' + i)?.classList.add('on'); }
+  if (S.bgVid) { if (step >= 3) S.vidImg = syncVid(step === 4 && S.crop.on ? clamp(t, span().a, span().b) : t, !audio.paused); else S.bgVid.clips.forEach(c => c.el.pause()); }      // 배경 영상을 노래 시각에 맞춰 재생
   if (step === 3) {
     S.boxes = draw(cg, t, audio.paused); const b = S.boxes[S.sel]; selbox.hidden = !b;
     const hit = (p, q) => p && q && p.x < q.x + q.w && q.x < p.x + p.w && p.y < q.y + q.h && q.y < p.y + p.h, B = S.boxes;
@@ -731,7 +790,7 @@ cleanTmp();
 const UP_FAIL = 'lyricvid-up-fail', UP_RUN = 'lyricvid-up-run';      // 처리 도중 탭이 꺼지면 UP_RUN 이 남아 다음에 열 때 실패로 센다
 try { if (localStorage.getItem(UP_RUN)) { localStorage.removeItem(UP_RUN); localStorage.setItem(UP_FAIL, (+localStorage.getItem(UP_FAIL) || 0) + 1); } } catch {}
 async function upscaleBg(st, bar) {
-  const src = S.bgSrc; if (!src) return;
+  const src = S.bgSrc; if (!src || S.bgVid) return;      // 배경이 영상이면 업스케일하지 않는다
   const need = Math.max(W / src.width, H / src.height) * S.bgT.zoom;      // 원본 한 픽셀이 화면에서 몇 배로 늘어나는지
   if (need <= (S.bgUp || 1) * 1.001 || S.bgUp >= 4) return;
   let fails = 0; try { fails = +localStorage.getItem(UP_FAIL) || 0; } catch {}
@@ -754,7 +813,7 @@ $('#render').onclick = async () => {
   if (!window.VideoEncoder) return alert('이 브라우저에서는 영상을 만들 수 없습니다. 컴퓨터의 크롬이나 엣지에서 열어 주세요.');
   const st = $('#status'), bar = $('#prog'); cancelled = false; audio.pause();
   $('#render').disabled = true; $('#cancel').hidden = false; $('#result').replaceChildren(); bar.hidden = false; bar.value = 0;
-  let out, disk = null;
+  let out, disk = null, vr = null;
   try {
     await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…'; if (S.eq?.meta.kind === 'live') await ensureLevels();
     const wav = await readWav(S.audioFile); let pcm = null;
@@ -764,13 +823,14 @@ $('#render').onclick = async () => {
     }
     const mp4 = S.fmt === 'mp4', raw = wav && !mp4;      // raw: WAV 소리 데이터를 그대로 옮겨 담는 경우
     if (wav && mp4) pcm = wavFloat(wav);
-    const estDur = S.crop.on ? span().b - span().a : (S.dur || 600), est = estDur * (BITRATE * W * H / (2560 * 1440) / 8 + (raw ? wav.sr * wav.bpf : mp4 ? 32000 : pcm.sr * pcm.ch * 2));
+    const estDur = S.crop.on ? span().b - span().a : (S.dur || 600), est = estDur * ((S.bgVid ? BITRATE_VID : BITRATE) * W * H / (2560 * 1440) / 8 + (raw ? wav.sr * wav.bpf : mp4 ? 32000 : pcm.sr * pcm.ch * 2));
     disk = await openDisk(est);
     const format = mp4 ? new MB.Mp4OutputFormat({ fastStart: disk ? false : 'in-memory' }) : new MB.MovOutputFormat();
     out = new MB.Output({ format, target: disk ? new MB.StreamTarget(disk.writable, { chunked: true, chunkSize: 4 * 1048576 }) : new MB.BufferTarget() });
     let aCodec = 'pcm-s16';
     if (mp4) { aCodec = await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: pcm.ch, sampleRate: pcm.sr, bitrate: 256e3 }); if (!aCodec) throw new Error('이 브라우저가 MP4용 소리 압축을 지원하지 않습니다. MOV로 뽑아 주세요'); }
-    const br = Math.round(BITRATE * W * H / (2560 * 1440)), codec = await MB.getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, bitrate: br });
+    const br = Math.round((S.bgVid ? BITRATE_VID : BITRATE) * W * H / (2560 * 1440)),      // 배경이 움직이면 용량을 올린다
+      codec = await MB.getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, bitrate: br });
     if (!codec) throw new Error(`이 브라우저가 ${W}x${H} 영상 압축을 지원하지 않습니다`);
     const ec = mk(W, H), eg = ec.getContext('2d'), vs = new MB.CanvasSource(ec, { codec, bitrate: br, keyFrameInterval: 5 });
     const as = raw ? new MB.EncodedAudioPacketSource(wav.codec) : new MB.AudioSampleSource(mp4 ? { codec: aCodec, bitrate: 256e3 } : { codec: 'pcm-s16' });
@@ -790,8 +850,10 @@ $('#render').onclick = async () => {
         sent += n;
       }
     };
+    vr = S.bgVid ? await vidReader(S.bgVid.clips) : null;
     for (let i = 0; i < frames; i++) {
       if (cancelled) throw new Error('cancel');
+      if (vr) S.vidImg = await vr.at(a + i / FPS);
       frame(eg, i / FPS, dur); await vs.add(i / FPS, 1 / FPS);
       if (i % FPS === FPS - 1) { await pushAudio((i + 1) / FPS); bar.value = i / frames; const el2 = (performance.now() - t0) / 1000; st.textContent = `영상 만드는 중… ${Math.round(i / frames * 100)}% (남은 시간 약 ${Math.ceil(el2 / (i + 1) * (frames - i) / 60)}분)`; }
     }
@@ -806,6 +868,7 @@ $('#render').onclick = async () => {
     if (disk) { await removeTmp(); dropLock(); }
     st.textContent = err.message === 'cancel' ? '취소했습니다.' : '실패: ' + err.message; if (err.message !== 'cancel') console.error(err);
   }
+  if (vr) { await vr.close(); S.vidImg = null; }
   $('#render').disabled = false; $('#cancel').hidden = true;
 };
 
