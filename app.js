@@ -125,7 +125,8 @@ function drawTable() {
       const inp = el('input', { className: 't', value: fmt(key === 'end' && c.start != null && c.end == null ? null : c[key]), placeholder: key === 'end' && c.start != null ? '다음 줄까지' : '' });
       inp.onchange = () => { const v = parseT(inp.value); if (v === undefined) inp.value = fmt(c[key]); else { c[key] = v; if (key === 'start' && v == null) c.end = null; } drawTable(); };
       const nudge = d => el('button', { className: 'mini', textContent: d > 0 ? '+' : '−', title: '0.1초', onclick: () => { const base = c[key] ?? (key === 'end' && c.start != null ? endOf(i) : null); if (base == null) return; c[key] = Math.max(0, +(base + d).toFixed(3)); drawTable(); } });
-      return el('td', {}, nudge(-.1), inp, nudge(.1));
+      const del = key === 'end' ? [el('button', { className: 'mini', innerHTML: ICON.x, title: '끝 시점 지우기(다음 줄이 시작될 때까지 보임)', style: c.end == null ? 'visibility:hidden' : '', onclick: () => { c.end = null; drawTable(); } })] : [];      // 자리는 늘 차지해 줄이 어긋나지 않게
+      return el('td', {}, nudge(-.1), inp, nudge(.1), ...del);
     };
     const text = el('input', { className: 'txt', value: c.text }); text.onchange = () => { c.text = text.value; sprites.clear(); };
     tb.append(el('tr', { id: 'row' + i },
