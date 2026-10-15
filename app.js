@@ -301,7 +301,7 @@ function draw(g, t, edit) {
     boxes.ttl = b;
   }
 
-  const lb = drawLyrics(g, t, activeCue(t), edit); if (lb) boxes.lyr = lb;
+  const lb = S.rendering ? blurLyrics(g, t) : drawLyrics(g, t, activeCue(t), edit); if (lb) boxes.lyr = lb;
   return boxes;
 }
 
@@ -316,6 +316,16 @@ function lyrW(L) {      // 가사 상자 폭은 곡 전체 가사 중 가장 긴
   if (key !== lyrWk) { lyrWk = key; lyrWv = Math.max(1, ...S.cues.filter(c => c.text).map(c => textSprite(c.text, L.font, L.size, L.st).w)); }
   return lyrWv;
 }
+let lyrMoving = false, blurC = null;
+function blurLyrics(g, t) {      // 영상 만들 때만: 줄이 움직이는 동안은 한 장면 시간(1/30초) 안의 여러 순간을 겹쳐 그려 움직임을 부드럽게(모션 블러)
+  lyrMoving = false; const b = drawLyrics(null, t, activeCue(t), false);
+  if (!lyrMoving) return drawLyrics(g, t, activeCue(t), false);
+  const N = 12, SH = .75;      // 겹쳐 그릴 순간 수, 한 장면 시간 중 겹치는 비율
+  if (blurC?.[0].width !== W || blurC[0].height !== H) blurC = [mk(W, H), mk(W, H)];
+  const [acc, one] = blurC, ag = acc.getContext('2d'), og = one.getContext('2d'); ag.clearRect(0, 0, W, H); ag.globalCompositeOperation = 'lighter'; ag.globalAlpha = 1 / N;
+  for (let k = 0; k < N; k++) { const ts = t + ((k + .5) / N - .5) * SH / FPS; og.clearRect(0, 0, W, H); drawLyrics(og, ts, activeCue(ts), false); ag.drawImage(one, 0, 0); }      // 'lighter' 로 더하면 정확한 평균이 된다
+  ag.globalCompositeOperation = 'source-over'; ag.globalAlpha = 1; g.drawImage(acc, 0, 0); return b;
+}
 function drawLyrics(g, t, i, edit) {
   const L = S.L.lyr, an = animOf(L), m = L.mode || 1; let alpha = 1, p = 0;
   if (i >= 0) {
@@ -323,7 +333,7 @@ function drawLyrics(g, t, i, edit) {
     if (an === 'fade') alpha = clamp((t - c.start) / hf, 0, 1) * clamp((endOf(i) - t) / hf, 0, 1);                       // 줄이 바뀔 때마다 잠깐 사라졌다 나타남
     else if (an !== 'none') {                                    // 이어지는 줄이 없을 때만 나타나기·사라지기
       if (!linked(i - 1)) alpha *= fin;
-      if (linked(i)) { const s1 = S.cues[i + 1].start, D = Math.min(adurOf(L, an), (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 전환이 끝난다
+      if (linked(i)) { const s1 = S.cues[i + 1].start, D = Math.min(adurOf(L, an), (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = 1 - (1 - p) ** 3; lyrMoving = p > 0 && p < 1; }      // 다음 줄 시작 시점에 전환이 끝난다
       else alpha *= fout;
     }
   } else if (edit) i = S.cues.findIndex(c => c.text);
@@ -344,7 +354,7 @@ function drawLyrics(g, t, i, edit) {
   if (an === 'scroll') parts = [{ L: state(i, p), dy: 0, al: 1 }];
   else if ((an === 'cross' || an === 'float') && p > 0) { const f = an === 'float' ? hM * .3 : 0; parts = [{ L: state(i, 0), dy: -f * p, al: 1 - p }, { L: state(i + 1, 0), dy: f * (1 - p), al: p }]; }
   else parts = [{ L: state(i, 0), dy: 0, al: 1 }];
-  const b = place(L, lyrW(L), lay.hgt);
+  const b = place(L, lyrW(L), lay.hgt); if (!g) return b;
   for (const P of parts) {
     P.L.sort((u, v) => Math.abs(v.x - lay.c0) - Math.abs(u.x - lay.c0));      // 지금 줄 자리에 가까운 줄을 나중에(위에) 그린다
     for (const o of P.L) { const r = o.r; g.globalAlpha = alpha * P.al * o.al; g.drawImage(o.a.c, alignX(L, b, o.a.w * r) - o.a.pad * r, b.y + o.y + P.dy - o.a.pad * r, o.a.c.width * r, o.a.c.height * r); }
@@ -821,7 +831,7 @@ async function upscaleBg(st, bar) {
 $('#render').onclick = async () => {
   if (!S.audioFile) return alert('음원을 먼저 넣어 주세요.');
   if (!window.VideoEncoder) return alert('이 브라우저에서는 영상을 만들 수 없습니다. 컴퓨터의 크롬이나 엣지에서 열어 주세요.');
-  const st = $('#status'), bar = $('#prog'); cancelled = false; audio.pause();
+  const st = $('#status'), bar = $('#prog'); cancelled = false; audio.pause(); S.rendering = true;
   $('#render').disabled = true; $('#cancel').hidden = false; $('#result').replaceChildren(); bar.hidden = false; bar.value = 0;
   let out, disk = null, vr = null;
   try {
@@ -879,6 +889,7 @@ $('#render').onclick = async () => {
     st.textContent = err.message === 'cancel' ? '취소했습니다.' : '실패: ' + err.message; if (err.message !== 'cancel') console.error(err);
   }
   if (vr) { await vr.close(); S.vidImg = null; }
+  S.rendering = false;
   $('#render').disabled = false; $('#cancel').hidden = true;
 };
 
