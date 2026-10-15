@@ -306,6 +306,8 @@ function draw(g, t, edit) {
 
 // 가사 그리기: 한 줄(지금), 두 줄(지금+다음), 세 줄(이전+지금+다음). 이어지는 줄로 바뀔 때의 전환은 L.anim
 const linked = i => i >= 0 && !!S.cues[i]?.text && S.cues[i].start != null && !!S.cues[i + 1]?.text && S.cues[i + 1].start != null && !gapAfter(i);      // i 줄과 다음 줄이 빈 시간 없이 이어지는가
+const ADUR = { fade: .3, cross: .3, float: .3, scroll: .18 };      // 전환에 걸리는 기본 시간(초). 사라지기는 사라졌다 나타나기까지 합친 시간
+const adurOf = (L, an) => L.adur?.[an] ?? ADUR[an] ?? .3;
 const animOf = L => { const a = L.anim ?? (L.mode === 3 ? 'scroll' : 'fade'); return a === 'scroll' && L.mode === 1 ? 'fade' : a; };
 let lyrWk = '', lyrWv = 0;
 function lyrW(L) {      // 가사 상자 폭은 곡 전체 가사 중 가장 긴 줄에 맞춰 고정한다(정렬·전환 중에 상자가 흔들리지 않게)
@@ -316,11 +318,11 @@ function lyrW(L) {      // 가사 상자 폭은 곡 전체 가사 중 가장 긴
 function drawLyrics(g, t, i, edit) {
   const L = S.L.lyr, an = animOf(L), m = L.mode || 1; let alpha = 1, p = 0;
   if (i >= 0) {
-    const c = S.cues[i], fin = clamp((t - c.start) / .15, 0, 1), fout = clamp((endOf(i) - t) / .15, 0, 1);
-    if (an === 'fade') alpha = fin * fout;                       // 줄이 바뀔 때마다 잠깐 사라졌다 나타남
+    const c = S.cues[i], fin = clamp((t - c.start) / .15, 0, 1), fout = clamp((endOf(i) - t) / .15, 0, 1), hf = adurOf(L, 'fade') / 2;
+    if (an === 'fade') alpha = clamp((t - c.start) / hf, 0, 1) * clamp((endOf(i) - t) / hf, 0, 1);                       // 줄이 바뀔 때마다 잠깐 사라졌다 나타남
     else if (an !== 'none') {                                    // 이어지는 줄이 없을 때만 나타나기·사라지기
       if (!linked(i - 1)) alpha *= fin;
-      if (linked(i)) { const s1 = S.cues[i + 1].start, D = Math.min(.3, (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 전환이 끝난다
+      if (linked(i)) { const s1 = S.cues[i + 1].start, D = Math.min(adurOf(L, an), (s1 - c.start) / 2); p = clamp((t - (s1 - D)) / D, 0, 1); p = p * p * (3 - 2 * p); }      // 다음 줄 시작 시점에 전환이 끝난다
       else alpha *= fout;
     }
   } else if (edit) i = S.cues.findIndex(c => c.text);
@@ -598,6 +600,10 @@ function buildPanel() {
   if (S.sel === 'lyr') P.append(head('표시'), row('줄 수',
     ...[[1, '한 줄'], [2, '두 줄'], [3, '세 줄']].map(([v, t]) => { const b = el('button', { className: 'seg' + (L.mode === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.mode = v; buildPanel(); }; return b; })),
     row('전환', el('div', { className: 'segs' }, ...[['none', '없음'], ['fade', '사라지기'], ['cross', '교차'], ['float', '떠오르기'], ['scroll', '스크롤']].filter(([v]) => v !== 'scroll' || L.mode > 1).map(([v, t]) => { const b = el('button', { className: 'seg' + (animOf(L) === v ? ' on' : ''), textContent: t }); b.onclick = () => { L.anim = v; buildPanel(); }; return b; }))));
+  if (S.sel === 'lyr' && animOf(L) !== 'none') {      // 지금 고른 전환의 시간
+    const an = animOf(L), A = L.adur ??= {}; A[an] ??= ADUR[an]; const r = range(A, an, .05, 1, .01), v = el('span', { className: 'hint', textContent: A[an].toFixed(2) + '초' });
+    r.addEventListener('input', () => v.textContent = A[an].toFixed(2) + '초'); P.append(row('전환 시간', r, v));
+  }
   if (S.sel === 'ttl') {
     const ti = el('input', { value: L.title, placeholder: '곡 제목' }), ar = el('input', { value: L.artist, placeholder: '아티스트 이름' });
     ti.oninput = () => L.title = ti.value; ar.oninput = () => L.artist = ar.value;
