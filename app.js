@@ -730,6 +730,14 @@ async function readWav(file) {     // WAV 안의 소리 데이터를 손대지 �
   }
   return null;
 }
+function to16(w) {      // WAV 소리를 16비트로 바꾼다. 아주 작은 잡음(TPDF 디더)을 섞어 비트를 줄일 때 생기는 거친 소리를 막는다
+  const dv = new DataView(w.data.buffer, w.data.byteOffset, w.data.byteLength), bps = w.bits / 8, n = w.data.byteLength / bps, out = new Int16Array(n);
+  const rd = w.codec === 'pcm-s24' ? i => { const p = i * 3, v = dv.getUint8(p) | dv.getUint8(p + 1) << 8 | dv.getInt8(p + 2) << 16; return v / 8388608; }
+    : w.codec === 'pcm-s32' ? i => dv.getInt32(i * 4, true) / 2147483648 : w.codec === 'pcm-f32' ? i => dv.getFloat32(i * 4, true)
+    : w.codec === 'pcm-f64' ? i => dv.getFloat64(i * 8, true) : i => (dv.getUint8(i) - 128) / 128;
+  for (let i = 0; i < n; i++) out[i] = Math.max(-32768, Math.min(32767, Math.round(rd(i) * 32767 + Math.random() - Math.random())));
+  return { ...w, tag: 1, bits: 16, codec: 'pcm-s16', bpf: w.ch * 2, data: new Uint8Array(out.buffer) };
+}
 function setCropFromLines() { const C = S.crop; if (S.cues[C.from]?.start != null && S.cues[C.to]?.start != null) { C.a = Math.max(0, S.cues[C.from].start); C.b = Math.min(S.dur || Infinity, endOf(C.to)); } else { C.a = 0; C.b = S.dur; } }
 function buildOut() {
   const P = $('#outPanel'), C = S.crop, F = S.fx; P.replaceChildren();
@@ -836,12 +844,13 @@ $('#render').onclick = async () => {
   let out, disk = null, vr = null;
   try {
     await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…'; if (S.eq?.meta.kind === 'live') await ensureLevels();
-    const wav = await readWav(S.audioFile); let pcm = null;
+    let wav = await readWav(S.audioFile), pcm = null;
     if (!wav) {   // WAV가 아니면 소리를 풀어서 압축 없이 담는다
       const ac = new AudioContext(), ab = await ac.decodeAudioData(await S.audioFile.arrayBuffer()); ac.close();
       pcm = { sr: ab.sampleRate, ch: ab.numberOfChannels, n: ab.length, chans: [...Array(ab.numberOfChannels)].map((_, c) => ab.getChannelData(c)) };
     }
-    const mp4 = S.fmt === 'mp4', raw = wav && !mp4;      // raw: WAV 소리 데이터를 그대로 옮겨 담는 경우
+    const mp4 = S.fmt === 'mp4', raw = wav && !mp4;
+    if (raw && wav.codec !== 'pcm-s16') { st.textContent = '소리를 16비트로 바꾸는 중…'; wav = to16(wav); }      // 24·32비트 PCM이 든 MOV는 갤럭시 갤러리 등에서 재생이 안 돼 16비트로 담는다      // raw: WAV 소리 데이터를 그대로 옮겨 담는 경우
     if (wav && mp4) pcm = wavFloat(wav);
     const estDur = S.crop.on ? span().b - span().a : (S.dur || 600), est = estDur * ((S.bgVid ? BITRATE_VID : BITRATE) * W * H / (2560 * 1440) / 8 + (raw ? wav.sr * wav.bpf : mp4 ? 32000 : pcm.sr * pcm.ch * 2));
     disk = await openDisk(est);
