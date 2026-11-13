@@ -487,16 +487,17 @@ async function loadBgVideos(fs) {
   for (const file of fs) {
     const v = Object.assign(document.createElement('video'), { muted: true, playsInline: true, preload: 'auto', src: URL.createObjectURL(file) });
     try { await new Promise((ok, no) => { v.onloadeddata = ok; v.onerror = () => no(); }); } catch { return alert(`${file.name}: 이 브라우저에서 읽을 수 없는 영상입니다.`); }
-    if (!(v.duration <= VID_MAX + .05)) return alert(`${file.name}: ${v.duration.toFixed(1)}초입니다. 배경 영상은 ${VID_MAX}초 이하 루프 영상만 넣을 수 있습니다.`);
+    if (fs.length > 1 && !(v.duration <= VID_MAX + .05)) return alert(`${file.name}: ${v.duration.toFixed(1)}초입니다. 두 개를 이어 붙이는 루프 영상은 각각 ${VID_MAX}초 이하만 됩니다. 긴 영상은 하나만 넣어 주세요.`);
     clips.push({ file, el: v, dur: v.duration, w: v.videoWidth, h: v.videoHeight });
   }
   const v0 = clips[0].el; if (v0.currentTime > 0) { v0.currentTime = 0; await new Promise(r => v0.onseeked = r); }
-  stopVids(); S.bgVid = { clips, total: clips.reduce((s, c) => s + c.dur, 0) }; S.vidImg = null;
+  stopVids(); S.bgVid = { clips, total: clips.reduce((s, c) => s + c.dur, 0), once: clips.length === 1 && clips[0].dur > VID_MAX + .05, start: 0, audio: 'wav' }; S.vidImg = null;      // once: 긴 영상은 반복하지 않고 한 번만, start: 노래 몇 초에 영상 0초가 오는지
   S.bgImg = S.bgSrc = await createImageBitmap(v0); S.bgUp = 1; S.bgFile = clips[0].file.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg();      // 첫 영상의 첫 장면: 위치 맞추기와 흐린 채우기에 쓴다
   $('#bgName').textContent = clips.map(c => `${c.file.name} (${c.w}x${c.h}, ${c.dur.toFixed(1)}초)`).join(' + '); if (S.sel === 'bg') buildPanel();
 }
 function stopVids() { S.bgVid?.clips.forEach(c => { c.el.pause(); URL.revokeObjectURL(c.el.src); }); }
-const clipAt = t => { const V = S.bgVid; let x = ((t % V.total) + V.total) % V.total; return x < V.clips[0].dur || V.clips.length < 2 ? [0, Math.min(x, V.clips[0].dur)] : [1, x - V.clips[0].dur]; };
+const clipAt = t => { const V = S.bgVid; if (V.once) return [0, clamp(t - V.start, 0, V.clips[0].dur - .02)];      // 긴 영상: 시작 전엔 첫 장면, 끝난 뒤엔 마지막 장면에서 멈춤
+  let x = ((t % V.total) + V.total) % V.total; return x < V.clips[0].dur || V.clips.length < 2 ? [0, Math.min(x, V.clips[0].dur)] : [1, x - V.clips[0].dur]; };
 function drawVidBg(g, img) {      // 그림 배경과 같은 자리·크기에 그린다. 두 번째 영상의 비율이 다르면 그 자리에 맞춰 가장자리를 잘라 채운다
   const T = S.bgT, b0 = S.bgImg, k = Math.max(W / b0.width, H / b0.height) * T.zoom, dw = b0.width * k, dh = b0.height * k, x = (W - dw) / 2 + T.dx, y = (H - dh) / 2 + T.dy;
   const sw = img.videoWidth || img.width, sh = img.videoHeight || img.height; if (!sw || !sh) return;
@@ -507,6 +508,7 @@ function syncVid(t, playing) {      // 미리보기: 노래 시각에 맞는 영
   const [k, loc] = clipAt(t), V = S.bgVid;
   V.clips.forEach((c, j) => { if (j !== k && !c.el.paused) c.el.pause(); });
   const v = V.clips[k].el;
+  if (V.once) { const run = playing && t - V.start >= 0 && t - V.start < v.duration - .05; if (run) { if (v.paused) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; } else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; } return v.readyState >= 2 ? v : null; }
   if (playing) { if (v.paused || v.ended) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; }
   else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; }
   return v.readyState >= 2 ? v : null;
@@ -586,6 +588,14 @@ function buildPanel() {
     P.append(head('화면 비율'), rb); rb.scrollLeft = rb.querySelector('.on').offsetLeft - 8;      // 좁은 화면에서는 한 줄을 좌우로 민다: 고른 비율이 보이게
     P.append(el('p', { className: 'hint', textContent: `지금 ${W}x${H}. 짧은 변이 1440이 되도록 맞춥니다.` }), head('배경 이미지'));
     if (!S.bgImg) { P.append(el('p', { className: 'hint', textContent: '화면 아래에서 배경 이미지를 넣으세요.' })); return; }
+    if (S.bgVid?.once) {      // 긴 영상: 노래와 시작 맞추기, 담을 소리 고르기
+      const V = S.bgVid, inp = el('input', { className: 't', value: V.start.toFixed(2) }), set = v => { V.start = Math.round(v * 100) / 100; inp.value = V.start.toFixed(2); };
+      inp.onchange = () => { const v = parseFloat(inp.value); set(isFinite(v) ? v : V.start); };
+      const nb = d => el('button', { className: 'mini', textContent: (d > 0 ? '+' : '') + d, onclick: () => set(V.start + d) });
+      P.append(head('배경 영상'), row('영상 시작', nb(-.1), nb(-.01), inp, nb(.01), nb(.1)), el('p', { className: 'hint', textContent: '노래 몇 초에 영상 0초가 오는지(초). 영상 속 노래가 늦게 시작하면 음수로 당깁니다.' }),
+        row('담을 소리', ...[['wav', '음원(WAV)'], ['video', '영상 소리']].map(([v, t]) => { const b = el('button', { className: 'seg' + (V.audio === v ? ' on' : ''), textContent: t }); b.onclick = () => { V.audio = v; buildPanel(); }; return b; })));
+      if (V.audio === 'video') P.append(el('p', { className: 'hint', textContent: '미리보기 소리는 음원으로 나오고, 완성 영상에는 영상 소리가 시작 맞춤대로 담깁니다.' }));
+    }
     const T = S.bgT, bmp = S.bgImg, cover = Math.max(W / bmp.width, H / bmp.height);
     const fits = [['가로 맞춤', W / bmp.width / cover], ['세로 맞춤', H / bmp.height / cover], ['원본 크기', 1 / cover / (S.bgUp || 1)]];
     const z = el('input', { type: 'range', min: .1, max: 5, step: .001, value: T.zoom }), zp = el('input', { type: 'number', min: 10, max: 500, step: 1, value: Math.round(T.zoom * 100) }), zn = el('span', { className: 'hint' });
@@ -730,6 +740,17 @@ async function readWav(file) {     // WAV 안의 소리 데이터를 손대지 �
   }
   return null;
 }
+async function videoPcm(V) {      // 배경 영상의 소리를 풀어, 노래 0초~끝에 맞춘 소리로 만든다(영상 시작 맞춤 반영)
+  const inp = new MB.Input({ source: new MB.BlobSource(V.clips[0].file), formats: MB.ALL_FORMATS }), tr = await inp.getPrimaryAudioTrack();
+  if (!tr) throw new Error('배경 영상에 소리가 없습니다. 담을 소리를 음원으로 바꿔 주세요');
+  if (!(await tr.canDecode())) throw new Error('배경 영상의 소리를 이 브라우저에서 풀 수 없습니다');
+  const sr = tr.sampleRate, ch = tr.numberOfChannels, n = Math.round((S.dur || V.clips[0].dur) * sr), chans = [...Array(ch)].map(() => new Float32Array(n));
+  for await (const { buffer, timestamp } of new MB.AudioBufferSink(tr).buffers()) {
+    const at = Math.round((timestamp + V.start) * sr);      // 영상 시각 x 는 노래 시각 x + 시작 맞춤
+    for (let c = 0; c < ch; c++) { const d = buffer.getChannelData(Math.min(c, buffer.numberOfChannels - 1)); for (let i = Math.max(0, -at); i < d.length && at + i < n; i++) chans[c][at + i] = d[i]; }
+  }
+  inp.dispose?.(); return { sr, ch, n, chans };
+}
 function to16(w) {      // WAV 소리를 16비트로 바꾼다. 아주 작은 잡음(TPDF 디더)을 섞어 비트를 줄일 때 생기는 거친 소리를 막는다
   const dv = new DataView(w.data.buffer, w.data.byteOffset, w.data.byteLength), bps = w.bits / 8, n = w.data.byteLength / bps, out = new Int16Array(n);
   const rd = w.codec === 'pcm-s24' ? i => { const p = i * 3, v = dv.getUint8(p) | dv.getUint8(p + 1) << 8 | dv.getInt8(p + 2) << 16; return v / 8388608; }
@@ -844,8 +865,10 @@ $('#render').onclick = async () => {
   let out, disk = null, vr = null;
   try {
     await upscaleBg(st, bar); await loadAllFonts(); st.textContent = '음원을 읽는 중…'; if (S.eq?.meta.kind === 'live') await ensureLevels();
-    let wav = await readWav(S.audioFile), pcm = null;
-    if (!wav) {   // WAV가 아니면 소리를 풀어서 압축 없이 담는다
+    let wav = null, pcm = null;
+    if (S.bgVid?.once && S.bgVid.audio === 'video') { st.textContent = '영상 소리를 읽는 중…'; pcm = await videoPcm(S.bgVid); }      // 영상 소리를 노래 시간에 맞춰 담는다
+    else wav = await readWav(S.audioFile);
+    if (!wav && !pcm) {   // WAV가 아니면 소리를 풀어서 압축 없이 담는다
       const ac = new AudioContext(), ab = await ac.decodeAudioData(await S.audioFile.arrayBuffer()); ac.close();
       pcm = { sr: ab.sampleRate, ch: ab.numberOfChannels, n: ab.length, chans: [...Array(ab.numberOfChannels)].map((_, c) => ab.getChannelData(c)) };
     }
