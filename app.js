@@ -490,10 +490,24 @@ async function loadBgVideos(fs) {
     if (fs.length > 1 && !(v.duration <= VID_MAX + .05)) return alert(`${file.name}: ${v.duration.toFixed(1)}초입니다. 두 개를 이어 붙이는 루프 영상은 각각 ${VID_MAX}초 이하만 됩니다. 긴 영상은 하나만 넣어 주세요.`);
     clips.push({ file, el: v, dur: v.duration, w: v.videoWidth, h: v.videoHeight });
   }
-  const v0 = clips[0].el; if (v0.currentTime > 0) { v0.currentTime = 0; await new Promise(r => v0.onseeked = r); }
+  let still;      // 첫 영상의 첫 장면: 위치 맞추기와 흐린 채우기에 쓴다. 이게 준비된 뒤에야 배경을 바꾼다(실패하면 이전 배경 그대로)
+  try { still = await firstFrame(clips[0]); } catch (err) { console.error(err); clips.forEach(c => URL.revokeObjectURL(c.el.src)); return alert(`영상의 첫 장면을 읽지 못했습니다: ${err.message || err}`); }
   stopVids(); S.bgVid = { clips, total: clips.reduce((s, c) => s + c.dur, 0), once: clips.length === 1 && clips[0].dur > VID_MAX + .05, start: 0, audio: 'wav' }; S.vidImg = null;      // once: 긴 영상은 반복하지 않고 한 번만, start: 노래 몇 초에 영상 0초가 오는지
-  S.bgImg = S.bgSrc = await createImageBitmap(v0); S.bgUp = 1; S.bgFile = clips[0].file.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg();      // 첫 영상의 첫 장면: 위치 맞추기와 흐린 채우기에 쓴다
+  S.bgImg = S.bgSrc = still; S.bgUp = 1; S.bgFile = clips[0].file.name; S.bgT = { zoom: 1, dx: 0, dy: 0 }; rebuildBg();
   $('#bgName').textContent = clips.map(c => `${c.file.name} (${c.w}x${c.h}, ${c.dur.toFixed(1)}초)`).join(' + '); if (S.sel === 'bg') buildPanel();
+}
+async function firstFrame(c) {      // 영상 첫 장면을 그림으로. 재생기에서 바로 못 얻으면(일부 폰) 영상을 직접 풀어서 얻는다
+  const v = c.el, w = v.videoWidth, hh = v.videoHeight;
+  try {
+    await Promise.race([new Promise(r => { v.requestVideoFrameCallback?.(r); v.onseeked = r; v.currentTime = .001; }), new Promise(r => setTimeout(r, 2000))]);
+    const cv = mk(w, hh), g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(v, 0, 0, w, hh);
+    const px = g.getImageData(0, 0, w, hh).data; let lit = false; for (let i = 3; i < px.length; i += 4 * 997) if (px[i] && (px[i - 1] | px[i - 2] | px[i - 3])) { lit = true; break; }
+    if (lit) return await createImageBitmap(cv);
+  } catch (err) { console.warn('재생기에서 첫 장면 실패:', err); }
+  const inp = new MB.Input({ source: new MB.BlobSource(c.file), formats: MB.ALL_FORMATS }), tr = await inp.getPrimaryVideoTrack();
+  if (!tr || !(await tr.canDecode())) throw new Error('이 브라우저에서 풀 수 없는 영상입니다');
+  const wc = await new MB.CanvasSink(tr).getCanvas(await tr.getFirstTimestamp()); if (!wc) throw new Error('첫 장면이 없습니다');
+  const bmp = await createImageBitmap(wc.canvas); inp.dispose?.(); return bmp;
 }
 function stopVids() { S.bgVid?.clips.forEach(c => { c.el.pause(); URL.revokeObjectURL(c.el.src); }); }
 const clipAt = t => { const V = S.bgVid; if (V.once) return [0, clamp(t - V.start, 0, V.clips[0].dur - .02)];      // 긴 영상: 시작 전엔 첫 장면, 끝난 뒤엔 마지막 장면에서 멈춤
