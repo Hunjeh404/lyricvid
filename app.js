@@ -509,7 +509,7 @@ async function firstFrame(c) {      // 영상 첫 장면을 그림으로. 재생
   const wc = await new MB.CanvasSink(tr).getCanvas(await tr.getFirstTimestamp()); if (!wc) throw new Error('첫 장면이 없습니다');
   const bmp = await createImageBitmap(wc.canvas); inp.dispose?.(); return bmp;
 }
-function stopVids() { S.bgVid?.clips.forEach(c => { c.el.pause(); URL.revokeObjectURL(c.el.src); }); }
+function stopVids() { vidHold = null; S.bgVid?.clips.forEach(c => { c.el.pause(); URL.revokeObjectURL(c.el.src); }); }
 const clipAt = t => { const V = S.bgVid; if (V.once) return [0, clamp(t - V.start, 0, V.clips[0].dur - .02)];      // 긴 영상: 시작 전엔 첫 장면, 끝난 뒤엔 마지막 장면에서 멈춤
   let x = ((t % V.total) + V.total) % V.total; return x < V.clips[0].dur || V.clips.length < 2 ? [0, Math.min(x, V.clips[0].dur)] : [1, x - V.clips[0].dur]; };
 function drawVidBg(g, img) {      // 그림 배경과 같은 자리·크기에 그린다. 두 번째 영상의 비율이 다르면 그 자리에 맞춰 가장자리를 잘라 채운다
@@ -518,14 +518,19 @@ function drawVidBg(g, img) {      // 그림 배경과 같은 자리·크기에 �
   let cw = sw, ch = sh; if (sw / sh > dw / dh) cw = sh * dw / dh; else ch = sw * dh / dw;
   g.imageSmoothingQuality = 'high'; g.drawImage(img, (sw - cw) / 2, (sh - ch) / 2, cw, ch, x, y, dw, dh);
 }
+let vidHold = null;
+function vidFrame(v) {      // 재생기가 장면을 옮기는(탐색 중인) 동안은 장면이 비어 첫 장면(밑그림)이 비친다. 마지막으로 보인 장면을 붙잡아 대신 쓴다
+  if (v.readyState >= 2 && !v.seeking) { const w = v.videoWidth, h = v.videoHeight; if (vidHold?.width !== w || vidHold.height !== h) vidHold = mk(w, h); vidHold.getContext('2d').drawImage(v, 0, 0); return v; }
+  return vidHold;
+}
 function syncVid(t, playing) {      // 미리보기: 노래 시각에 맞는 영상을 맞는 자리에서 재생
   const [k, loc] = clipAt(t), V = S.bgVid;
   V.clips.forEach((c, j) => { if (j !== k && !c.el.paused) c.el.pause(); });
   const v = V.clips[k].el;
-  if (V.once) { const run = playing && t - V.start >= 0 && t - V.start < v.duration - .05; if (run) { if (v.paused) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; } else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; } return v.readyState >= 2 ? v : null; }
+  if (V.once) { const run = playing && t - V.start >= 0 && t - V.start < v.duration - .05; if (run) { if (v.paused) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; } else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; } return vidFrame(v); }
   if (playing) { if (v.paused || v.ended) { v.currentTime = loc; v.play().catch(() => {}); } else if (Math.abs(v.currentTime - loc) > .25) v.currentTime = loc; }
   else { if (!v.paused) v.pause(); if (!v.seeking && Math.abs(v.currentTime - loc) > .04) v.currentTime = loc; }
-  return v.readyState >= 2 ? v : null;
+  return vidFrame(v);
 }
 async function vidReader(clips) {      // 영상 만들기: 장면을 순서대로 풀어서 정확한 시각의 장면을 꺼낸다
   const tr = await Promise.all(clips.map(async c => {
@@ -916,10 +921,10 @@ $('#render').onclick = async () => {
         sent += n;
       }
     };
-    vr = S.bgVid ? await vidReader(S.bgVid.clips) : null;
+    vr = S.bgVid ? await vidReader(S.bgVid.clips) : null; S.vidImg = null;
     for (let i = 0; i < frames; i++) {
       if (cancelled) throw new Error('cancel');
-      if (vr) S.vidImg = await vr.at(a + i / FPS);
+      if (vr) S.vidImg = (await vr.at(a + i / FPS)) || S.vidImg;      // 장면을 못 얻은 순간엔 직전 장면 유지
       frame(eg, i / FPS, dur); await vs.add(i / FPS, 1 / FPS);
       if (i % FPS === FPS - 1) { await pushAudio((i + 1) / FPS); bar.value = i / frames; const el2 = (performance.now() - t0) / 1000; st.textContent = `영상 만드는 중… ${Math.round(i / frames * 100)}% (남은 시간 약 ${Math.ceil(el2 / (i + 1) * (frames - i) / 60)}분)`; }
     }
